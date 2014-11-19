@@ -63,7 +63,7 @@ struct comp_data_t {
 
 /* Write the control byte(s) that define data
  * type is the P_xxx value that determines the type of the control byte */
-inline int lzjb_write_control(struct comp_data_t *data, unsigned char type, unsigned int value)
+static inline int lzjb_write_control(struct comp_data_t *data, const unsigned char type, const unsigned int value)
 {
 	if (value > P_SHORT_MAX) {
 		*(data->out + data->opos) = type | (value >> 8);
@@ -78,7 +78,7 @@ inline int lzjb_write_control(struct comp_data_t *data, unsigned char type, unsi
 }
 
 /* Write out all pending literals */
-inline int lzjb_flush_literals(struct comp_data_t *data)
+static inline int lzjb_flush_literals(struct comp_data_t *data)
 {
 	int i = 0;
 
@@ -99,11 +99,11 @@ inline int lzjb_flush_literals(struct comp_data_t *data)
 }
 
 /* Find best LZ data match for current input position */
-inline int lzjb_find_lz(struct comp_data_t *data)
+static inline int lzjb_find_lz(struct comp_data_t *data)
 {
 	unsigned int scan = 0;
-	unsigned char *m1, *m2;	/* pointers for matches */
-	unsigned int b1, b2;	/* m1/m2 offset counters */
+	register unsigned char *m1, *m2;	/* pointers for matches */
+	register unsigned char *lim1, *lim2;	/* m1/m2 limits */
 	unsigned int length;	/* match length */
 	unsigned int best_lz = 0;
 	unsigned int best_lz_start = 0;
@@ -112,8 +112,8 @@ inline int lzjb_find_lz(struct comp_data_t *data)
 	while (scan < data->ipos) {
 		m1 = data->in + scan;
 		m2 = data->in + data->ipos;
-		b1 = scan;
-		b2 = data->ipos;
+		lim1 = data->in + data->ipos;
+		lim2 = data->in + data->length;
 		length = 0;
 		while (1) {
 			/* Large matches
@@ -141,11 +141,11 @@ inline int lzjb_find_lz(struct comp_data_t *data)
 end_lz_large_match:*/
 			/* Match single bytes */
 			if (*m1 == *m2) {
-				if (b2 == data->length) {
+				if (m2 == lim2) {
 					DLOG("LZ: hit end of data\n");
 					goto end_lz_match;
 				}
-				if (b1 == data->ipos) {
+				if (m1 == lim1) {
 					DLOG("LZ: hit end of dictionary\n");
 					goto end_lz_match;
 				}
@@ -154,7 +154,7 @@ end_lz_large_match:*/
 					DLOG("LZ: maximum length reached\n");
 					goto end_lz_match;
 				}
-				b1++; b2++; m1++; m2++;
+				m1++; m2++;
 			} else goto end_lz_match;
 		}
 end_lz_match:
@@ -184,9 +184,9 @@ end_lz_match:
 }
 
 /* Find best RLE data match for current input position */
-inline int lzjb_find_rle(struct comp_data_t *data)
+static inline int lzjb_find_rle(struct comp_data_t *data)
 {
-	unsigned char c;
+	register unsigned char c;
 	unsigned int length = 0;
 
 	c = *(data->in + data->ipos);
@@ -216,7 +216,7 @@ inline int lzjb_find_rle(struct comp_data_t *data)
  * Returns the size of "out" data or returns -1 if the
  * compressed data is not smaller than the original data.
  */
-inline int lzjb_compress(unsigned char *blk_in, unsigned char *blk_out, const unsigned int options, const int length)
+int lzjb_compress(unsigned char *blk_in, unsigned char *blk_out, const unsigned int options, const int length)
 {
 	struct comp_data_t comp_data;
 	struct comp_data_t *data = &comp_data;
@@ -262,21 +262,19 @@ inline int lzjb_compress(unsigned char *blk_in, unsigned char *blk_out, const un
 }
 
 /* LZJB decompressor */
-inline int lzjb_decompress(unsigned char *in, unsigned char *out, const unsigned int size)
+int lzjb_decompress(const unsigned char *in, unsigned char *out, const unsigned int size)
 {
 	unsigned int mode;
-	unsigned int ipos = 0;
-	unsigned int opos = 0;
-	unsigned int short_mode;
+	register unsigned int ipos = 0;
+	register unsigned int opos = 0;
 	unsigned int offset, length;
 	unsigned int control;
 	unsigned char c;
 
 	while (ipos < size) {
 		c = *(in + ipos);
-		short_mode = c & P_SHORT;
 		mode = c & P_MASK & ~P_SHORT;
-		if (short_mode) {
+		if (c & P_SHORT) {
 			control = c & ~P_MASK & ~P_SHORT;
 			ipos++;
 		} else {

@@ -1,6 +1,6 @@
 CC=gcc
 #CFLAGS=-Os -flto -ffunction-sections -fdata-sections -fno-unwind-tables -fno-asynchronous-unwind-tables
-CFLAGS=-O2 -flto
+CFLAGS=-O3 -flto
 #CFLAGS=-Og -g3
 BUILD_CFLAGS=-std=gnu99 -I. -D_FILE_OFFSET_BITS=64 -pipe -Wall -pedantic
 LDFLAGS=-s -Wl,--gc-sections
