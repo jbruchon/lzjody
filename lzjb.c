@@ -34,14 +34,16 @@
 #define P_LZ	0x60
 #define P_RLE	0x40
 #define P_LIT	0x20
+#define P_EXT	0x00	/* Extended form (future expansion) */
 
 /* Control bits masking value */
 #define P_MASK	0x60
+#define P_XMASK 0x0f	/* Extended command */
 /* Maximum length of a short element */
 #define P_SHORT_MAX 0x1f
 /* Minimum sizes for compression */
-#define MIN_LZ_MATCH 5
-#define MIN_RLE_LENGTH 3
+#define MIN_LZ_MATCH 6
+#define MIN_RLE_LENGTH 5
 
 /* Options for the compressor */
 #define O_FAST_LZ 0x01
@@ -103,7 +105,7 @@ static inline int lzjb_find_lz(struct comp_data_t *data)
 {
 	unsigned int scan = 0;
 	register unsigned char *m1, *m2;	/* pointers for matches */
-	register unsigned char *lim1, *lim2;	/* m1/m2 limits */
+	register unsigned char *lim;	/* m1/m2 limits */
 	unsigned int length;	/* match length */
 	unsigned int best_lz = 0;
 	unsigned int best_lz_start = 0;
@@ -112,50 +114,20 @@ static inline int lzjb_find_lz(struct comp_data_t *data)
 	while (scan < data->ipos) {
 		m1 = data->in + scan;
 		m2 = data->in + data->ipos;
-		lim1 = data->in + data->ipos;
-		lim2 = data->in + data->length;
+		lim = data->in + data->length;
 		length = 0;
-		while (1) {
-			/* Large matches
-			 * This attempts to take advantage of machine word
-			 * sized checking to speed up compression.
-			 */
-/* Large matches as written here do not improve performance...YET! */
-/*			typedef uint64_t lm_t;
-			if ((uintptr_t)m1 & (uintptr_t)(WORD_SIZE - 1)) goto end_lz_large_match;
-			if ((uintptr_t)m2 & (uintptr_t)(WORD_SIZE - 1)) goto end_lz_large_match;
-			if (length < (255 - sizeof(lm_t))) goto end_lz_large_match;
-			if ((b2 + sizeof(lm_t)) >= data->length) goto end_lz_large_match;
-			if ((b1 + sizeof(lm_t)) >= data->ipos) goto end_lz_large_match;
-			if (*(lm_t *)m1 == *(lm_t *)m2) {
-				length++;
-				if (length == 255) {
-					DLOG("LZ: maximum length reached\n");
-					goto end_lz_match;
-				}
-				b1 += sizeof(lm_t);
-				b2 += sizeof(lm_t);
-				m1 += sizeof(lm_t);
-				m2 += sizeof(lm_t);
+		/* Match single bytes */
+		while (*m1 == *m2) {
+			if (m2 == lim) {
+				DLOG("LZ: hit end of data\n");
+				goto end_lz_match;
 			}
-end_lz_large_match:*/
-			/* Match single bytes */
-			if (*m1 == *m2) {
-				if (m2 == lim2) {
-					DLOG("LZ: hit end of data\n");
-					goto end_lz_match;
-				}
-				if (m1 == lim1) {
-					DLOG("LZ: hit end of dictionary\n");
-					goto end_lz_match;
-				}
-				length++;
-				if (length == 255) {
-					DLOG("LZ: maximum length reached\n");
-					goto end_lz_match;
-				}
-				m1++; m2++;
-			} else goto end_lz_match;
+			length++;
+			if (length == 255) {
+				DLOG("LZ: maximum length reached\n");
+				goto end_lz_match;
+			}
+			m1++; m2++;
 		}
 end_lz_match:
 		/* If this run was the longest match, record it */
@@ -273,9 +245,9 @@ int lzjb_decompress(const unsigned char *in, unsigned char *out, const unsigned 
 
 	while (ipos < size) {
 		c = *(in + ipos);
-		mode = c & P_MASK & ~P_SHORT;
+		mode = c & (P_MASK & ~P_SHORT);
 		if (c & P_SHORT) {
-			control = c & ~P_MASK & ~P_SHORT;
+			control = c & (~P_MASK & ~P_SHORT);
 			ipos++;
 		} else {
 			control = (c & ~P_MASK) << 8;
@@ -321,7 +293,7 @@ int main(int argc, char **argv)
 {
 	struct files_t file_vars;
 	struct files_t *files = &file_vars;
-	unsigned char blk[B_SIZE], out[B_SIZE + 4];
+	unsigned char blk[B_SIZE + 4], out[B_SIZE + 4];
 	int i, length;
 	unsigned char options = 0;
 	int blocknum = 0;
