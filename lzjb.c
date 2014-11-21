@@ -69,9 +69,10 @@ struct files_t {
 };
 
 struct comp_data_t {
-	unsigned char *in;
-	unsigned char *out;
-	unsigned int ipos, opos;
+	const unsigned char * const in;
+	unsigned char * const out;
+	unsigned int ipos;
+	unsigned int opos;
 	unsigned int literals;
 	unsigned int literal_start;
 	unsigned int length;	/* Length of input data */
@@ -80,7 +81,7 @@ struct comp_data_t {
 
 /* Write the control byte(s) that define data
  * type is the P_xxx value that determines the type of the control byte */
-static inline int lzjb_write_control(struct comp_data_t *data, const unsigned char type, const unsigned int value)
+static inline int lzjb_write_control(struct comp_data_t * const data, const unsigned char type, const unsigned int value)
 {
 	/* Extended control bytes */
 	if ((type & P_MASK) == P_EXT) {
@@ -115,7 +116,7 @@ static inline int lzjb_write_control(struct comp_data_t *data, const unsigned ch
 }
 
 /* Write out all pending literals */
-static inline int lzjb_flush_literals(struct comp_data_t *data)
+static inline int lzjb_flush_literals(struct comp_data_t * const data)
 {
 	int i = 0;
 
@@ -136,11 +137,11 @@ static inline int lzjb_flush_literals(struct comp_data_t *data)
 }
 
 /* Find best LZ data match for current input position */
-static inline int lzjb_find_lz(struct comp_data_t *data)
+static inline int lzjb_find_lz(struct comp_data_t *const data)
 {
 	unsigned int scan = 0;
-	register unsigned char *m1, *m2;	/* pointers for matches */
-	register unsigned char *lim;	/* m1/m2 limits */
+	const unsigned char *m1, *m2;	/* pointers for matches */
+	const unsigned char *lim;	/* m1/m2 limits */
 	unsigned int length;	/* match length */
 	unsigned int best_lz = 0;
 	unsigned int best_lz_start = 0;
@@ -191,12 +192,11 @@ end_lz_match:
 }
 
 /* Find best RLE data match for current input position */
-static inline int lzjb_find_rle(struct comp_data_t *data)
+static inline int lzjb_find_rle(struct comp_data_t *const data)
 {
-	register unsigned char c;
+	register const unsigned char c = *(data->in + data->ipos);
 	unsigned int length = 0;
 
-	c = *(data->in + data->ipos);
 	while (((length + data->ipos) < data->length) && (*(data->in + data->ipos + length) == c)) {
 		length++;
 		//fprintf(stderr, "length %d (%02x = %02x)\n", length, c, *(data->in + data->ipos + length));
@@ -218,24 +218,24 @@ static inline int lzjb_find_rle(struct comp_data_t *data)
 
 
 /* Find sequential values for compression */
-static inline int lzjb_find_seq(struct comp_data_t *data)
+static inline int lzjb_find_seq(struct comp_data_t * const data)
 {
 	uint8_t num8;
-	uint8_t num_orig8;
-	uint8_t *m8;
+	uint8_t *m8 = (uint8_t *)((uintptr_t)data->in + (uintptr_t)data->ipos);
+	const uint8_t num_orig8 = *m8;
 	uint16_t num16;
-	uint16_t num_orig16;
-	uint16_t *m16;
+	uint16_t *m16 = (uint16_t *)((uintptr_t)data->in + (uintptr_t)data->ipos);
+	const uint16_t num_orig16 = *m16;
 	uint32_t num32;
-	uint32_t num_orig32;
-	uint32_t *m32;
+	uint32_t *m32 = (uint32_t *)((uintptr_t)data->in + (uintptr_t)data->ipos);
+	const uint32_t num_orig32 = *m32;
 	int seqcnt;
 	int compressed = 0;
 
 	/* 32-bit sequences */
 	seqcnt = 0;
-	m32 = (uint32_t *)((uintptr_t)data->in + (uintptr_t)data->ipos);
-	num_orig32 = *m32;	/* Save starting number */
+//	m32 = (uint32_t *)((uintptr_t)data->in + (uintptr_t)data->ipos);
+//	num_orig32 = *m32;	/* Save starting number */
 	num32 = *m32;
 	while (((data->ipos + seqcnt) < B_SIZE) && (*m32 == num32)) {
 		seqcnt++;
@@ -256,8 +256,8 @@ static inline int lzjb_find_seq(struct comp_data_t *data)
 
 	/* 16-bit sequences */
 	seqcnt = 0;
-	m16 = (uint16_t *)((uintptr_t)data->in + (uintptr_t)data->ipos);
-	num_orig16 = *m16;	/* Save starting number */
+//	m16 = (uint16_t *)((uintptr_t)data->in + (uintptr_t)data->ipos);
+//	num_orig16 = *m16;	/* Save starting number */
 	num16 = *m16;
 	while (((data->ipos + seqcnt) < B_SIZE) && (*m16 == num16)) {
 		seqcnt++;
@@ -278,8 +278,8 @@ static inline int lzjb_find_seq(struct comp_data_t *data)
 
 	/* 8-bit sequences */
 	seqcnt = 0;
-	m8 = (uint8_t *)((uintptr_t)data->in + (uintptr_t)data->ipos);
-	num_orig8 = *m8;
+//	m8 = (uint8_t *)((uintptr_t)data->in + (uintptr_t)data->ipos);
+//	num_orig8 = *m8;
 	num8 = *m8;
 	while (((data->ipos + seqcnt) < B_SIZE) && (*m8 == num8)) {
 		seqcnt++;
@@ -307,19 +307,21 @@ static inline int lzjb_find_seq(struct comp_data_t *data)
  * Returns the size of "out" data or returns -1 if the
  * compressed data is not smaller than the original data.
  */
-int lzjb_compress(unsigned char *blk_in, unsigned char *blk_out, const unsigned int options, const int length)
+int lzjb_compress(const unsigned char * const blk_in, unsigned char * const blk_out, const unsigned int options, const int length)
 {
-	struct comp_data_t comp_data;
-	struct comp_data_t *data = &comp_data;
+	struct comp_data_t comp_data = {
+		blk_in,		/* in */
+		blk_out,	/* out */
+		0,		/* ipos */
+		2,		/* opos */
+		0,		/* literals */
+		0,		/* literal_start */
+		length,		/* length */
+		(options & O_FAST_LZ)	/* stop at first match */
+	};
+	struct comp_data_t * const data = &comp_data;
 
 	/* Initialize compression data structure */
-	data->in = blk_in;
-	data->out = blk_out;
-	data->ipos = 0;
-	data->opos = 2;
-	data->literals = 0;
-	data->fast_lz = options & O_FAST_LZ;
-	data->length = length;
 
 	DLOG("Compressing block of length %d\n", length);
 	/* Scan through entire block looking for compressible items */
@@ -329,8 +331,8 @@ int lzjb_compress(unsigned char *blk_in, unsigned char *blk_out, const unsigned 
 		 * Try each compressor in sequence; if none works,
 		 * just add the byte to the literal stream
 		 */
-		if (!lzjb_find_lz(data))  {
 		if (!lzjb_find_rle(data)) {
+		if (!lzjb_find_lz(data))  {
 		if (!lzjb_find_seq(data)) {
 			if (data->literals == 0)
 				data->literal_start = data->ipos;
@@ -355,7 +357,7 @@ int lzjb_compress(unsigned char *blk_in, unsigned char *blk_out, const unsigned 
 }
 
 /* LZJB decompressor */
-int lzjb_decompress(const unsigned char *in, unsigned char *out, const unsigned int size)
+int lzjb_decompress(const unsigned char * const in, unsigned char * const out, const unsigned int size)
 {
 	unsigned int mode;
 	register unsigned int ipos = 0;
@@ -435,7 +437,7 @@ int lzjb_decompress(const unsigned char *in, unsigned char *out, const unsigned 
 
 			case P_SEQ32:
 				/* Sequential increment compression (32-bit) */
-				DLOG("%04x:%04x: Seq(32) 0x%x\n", ipos, opos, control);
+				DLOG("%04x:%04x: Seq(32) 0x%x\n", ipos, opos, length);
 				/* Get sequence start number */
 				num32 = *(uint32_t *)((uintptr_t)in + (uintptr_t)ipos);
 				ipos += sizeof(uint32_t);
@@ -452,7 +454,7 @@ int lzjb_decompress(const unsigned char *in, unsigned char *out, const unsigned 
 
 			case P_SEQ16:
 				/* Sequential increment compression (16-bit) */
-				DLOG("%04x:%04x: Seq(16) 0x%x\n", ipos, opos, control);
+				DLOG("%04x:%04x: Seq(16) 0x%x\n", ipos, opos, length);
 				/* Get sequence start number */
 				num16 = *(uint16_t *)((uintptr_t)in + (uintptr_t)ipos);
 				ipos += sizeof(uint16_t);
@@ -469,7 +471,7 @@ int lzjb_decompress(const unsigned char *in, unsigned char *out, const unsigned 
 
 			case P_SEQ8:
 				/* Sequential increment compression (8-bit) */
-				DLOG("%04x:%04x: Seq(8) 0x%x\n", ipos, opos, control);
+				DLOG("%04x:%04x: Seq(8) 0x%x\n", ipos, opos, length);
 				/* Get sequence start number */
 				num8 = *(uint8_t *)((uintptr_t)in + (uintptr_t)ipos);
 				ipos += sizeof(uint8_t);
