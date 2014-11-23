@@ -64,6 +64,11 @@
 #define MIN_SEQ16_LENGTH 7
 #define MIN_SEQ8_LENGTH 6
 
+/* If a byte occurs more times than this in a block, use linear scanning */
+#ifndef MAX_LZ_BYTE_SCANS
+ #define MAX_LZ_BYTE_SCANS 0x800
+#endif
+
 /* Options for the compressor */
 #define O_FAST_LZ 0x01
 
@@ -81,7 +86,37 @@ struct comp_data_t {
 	unsigned int literal_start;
 	unsigned int length;	/* Length of input data */
 	int fast_lz;	/* 0=exhaustive search, 1=stop at first match */
+	uint16_t byte[256][B_SIZE];	/* Lists of locations of each byte value */
+	uint16_t bytecnt[256];	/* How many offsets exist per byte */
 };
+
+/* Build an array of byte values for faster LZ matching */
+static void index_bytes(struct comp_data_t * const data)
+{
+	unsigned int pos = 0;
+	const unsigned char *mem = data->in;
+	unsigned char c;
+
+	/* Clear any existing index */
+	for (int i = 0; i < 256; i++ ) data->bytecnt[i] = 0;
+
+	/* Read each byte and add its offset to its list */
+	while (pos < (data->length - MIN_LZ_MATCH)) {
+		c = *mem;
+		data->byte[c][data->bytecnt[c]] = pos;
+		data->bytecnt[c]++;
+//		DLOG("pos 0x%x, len 0x%x, byte 0x%x, cnt 0x%x\n",
+//				pos, data->length, c,
+//				data->bytecnt[c]);
+		mem++;
+		pos++;
+		if (data->bytecnt[c] > B_SIZE) {
+			fprintf(stderr, "error: index_bytes overflowed\n");
+			exit(EXIT_FAILURE);
+		}
+	}
+	return;
+}
 
 /* Write the control byte(s) that define data
  * type is the P_xxx value that determines the type of the control byte */
@@ -90,25 +125,25 @@ static inline void lzjb_write_control(struct comp_data_t * const data,
 		const uint16_t value)
 {
 	if (value > 0x1000) goto error_value_too_large;
-	DLOG("lzjb_write_control: type 0x%x, value 0x%x: ", type, value);
+	DLOG("control: t 0x%x, val 0x%x: ", type, value);
 	/* Extended control bytes */
 	if ((type & P_MASK) == P_EXT) {
 		if (value > P_SHORT_XMAX) {
 			/* Full size control bytes */
 			*(data->out + data->opos) = type;
 			data->opos++;
-			DLOG("type 0x%x ", type);
+			DLOG("t0x%x ", type);
 			*(data->out + data->opos) = (value >> 8);
 			data->opos++;
-			DLOG("value(H) 0x%x ", (value >> 8));
+			DLOG("vH 0x%x ", (value >> 8));
 			*(data->out + data->opos) = value;
 			data->opos++;
-			DLOG("value(L) 0x%x\n", value);
+			DLOG("vL 0x%x\n", value);
 		} else {
 			/* For P_SHORT_XMAX or less, use compact form */
 			*(data->out + data->opos) = (type | P_SHORT);
 			data->opos++;
-			DLOG("type 0x%x\n", type);
+			DLOG("t 0x%x\n", type);
 			*(data->out + data->opos) = value;
 			data->opos++;
 		}
@@ -119,14 +154,14 @@ static inline void lzjb_write_control(struct comp_data_t * const data,
 		DLOG("t: %x\n", type | (unsigned char)(value >> 8));
 		*(data->out + data->opos) = (type | (unsigned char)(value >> 8));
 		data->opos++;
-		DLOG("type+val(H) 0x%x, val(L) 0x%x\n", *(data->out + data->opos - 1), (unsigned char)value);
+		DLOG("t+vH 0x%x, vL 0x%x\n", *(data->out + data->opos - 1), (unsigned char)value);
 		*(data->out + data->opos) = (unsigned char)value;
 		data->opos++;
 	} else {
 		/* For P_SHORT_MAX or less chars, use compact form */
 		*(data->out + data->opos) = (type | P_SHORT | value);
 		data->opos++;
-		DLOG("type+val 0x%x\n", data->opos - 1);
+		DLOG("t+v 0x%x\n", data->opos - 1);
 	}
 	return;
 error_value_too_large:
@@ -159,20 +194,79 @@ static inline void lzjb_flush_literals(struct comp_data_t * const data)
 static inline int lzjb_find_lz(struct comp_data_t * const data)
 {
 	unsigned int scan = 0;
-	const unsigned char *m1, *m2;	/* pointers for matches */
+	const unsigned char *m0, *m1, *m2;	/* pointers for matches */
 	unsigned int length;	/* match length */
 	const unsigned int in_remain = data->length - data->ipos;
-	unsigned int remain;	/* remaining matches possible */
+	int remain;	/* remaining matches possible */
 	unsigned int best_lz = 0;
 	unsigned int best_lz_start = 0;
+	unsigned int total_scans;
+	unsigned int offset;
 
+	if (data->ipos >= (data->length - MIN_LZ_MATCH)) return 0;
+	/* Try using the new fancy speedup code! :D */
+	m0 = data->in + data->ipos;
+	total_scans = data->bytecnt[*m0];
+
+	/* If the byte value does not exist anywhere, give up */
+	if (!total_scans) return 0;
+
+	/* Use linear matches if a byte happens too frequently */
+	if (total_scans > MAX_LZ_BYTE_SCANS) goto lz_linear_match;
+
+	while (scan < total_scans) {
+		/* Get offset of next byte */
+		length = 0;
+		m1 = m0;
+		offset = data->byte[*m1][scan];
+
+		/* Don't use offsets higher than input position */
+		if (offset >= data->ipos) {
+			scan = total_scans;
+			goto end_lz_jump_match;
+		}
+
+		remain = data->length - data->ipos;
+		m2 = data->in + offset;
+/*		DLOG("LZ: offset 0x%x, remain 0x%x, scan 0x%x, total_scans 0x%x\n",
+		    offset, remain, scan, total_scans);
+*/		while (*m1 == *m2) {
+/*			DLOG("LZ: m1 0x%lx == m2 0x%lx (remain %x)\n",
+					(long)((uintptr_t)m1 - (uintptr_t)(data->in)),
+					(long)((uintptr_t)m2 - (uintptr_t)(data->in)),
+					remain
+					);
+*/			length++;
+			m1++; m2++;
+			remain--;
+			if (!remain) {
+				DLOG("LZ: hit end of data\n");
+				break;
+			}
+			if (length >= MAX_LZ_MATCH) {
+				DLOG("LZ: maximum length reached\n");
+				break;
+			}
+		}
+end_lz_jump_match:
+		/* If this run was the longest match, record it */
+		if ((length >= MIN_LZ_MATCH) && (length > best_lz)) {
+			DLOG("LZ match: 0x%x : 0x%x (j)\n", offset, length);
+			best_lz_start = offset;
+			best_lz = length;
+			if (data->fast_lz) break;	/* Accept first LZ match */
+			if (length >= MAX_LZ_MATCH) break;
+		}
+		scan++;
+	}
+	goto end_lz_matches;
+
+lz_linear_match:
 	while (scan < data->ipos) {
 		m1 = data->in + scan;
 		m2 = data->in + data->ipos;
 		length = 0;
 
-		/* Whole word matching seems to actually be slower! */
-		/* Match single bytes */
 		remain = (in_remain - length);
 		if (remain) {
 			while (*m1 == *m2) {
@@ -181,18 +275,18 @@ static inline int lzjb_find_lz(struct comp_data_t * const data)
 				remain--;
 				if (!remain) {
 					DLOG("LZ: hit end of data\n");
-					goto end_lz_match;
+					goto end_lz_linear_match;
 				}
 				if (length >= MAX_LZ_MATCH) {
 					DLOG("LZ: maximum length reached\n");
-					goto end_lz_match;
+					goto end_lz_linear_match;
 				}
 			}
 		}
-end_lz_match:
+end_lz_linear_match:
 		/* If this run was the longest match, record it */
 		if ((length >= MIN_LZ_MATCH) && (length > best_lz)) {
-			DLOG("LZ found match: 0x%x : 0x%x\n", scan, length);
+			DLOG("LZ match: 0x%x : 0x%x (l)\n", scan, length);
 			best_lz_start = scan;
 			best_lz = length;
 			if (data->fast_lz) break;	/* Accept first LZ match */
@@ -200,6 +294,8 @@ end_lz_match:
 		}
 		scan++;
 	}
+
+end_lz_matches:
 	/* Write out the best LZ match, if any */
 	if (best_lz) {
 		lzjb_flush_literals(data);
@@ -235,7 +331,7 @@ static inline int lzjb_find_rle(struct comp_data_t * const data)
 		data->opos++;
 		/* Skip matched input */
 		data->ipos += length;
-		DLOG("RLE compressed 0x%02x bytes of 0x%02x at %x/%x\n",
+		DLOG("RLE: 0x%02x of 0x%02x at %x/%x\n",
 				length, c, data->ipos, data->opos);
 		return 1;
 	}
@@ -333,6 +429,7 @@ int lzjb_compress(const unsigned char * const blk_in,
 		const unsigned int options,
 		const int length)
 {
+	/* Initialize compression data structure */
 	struct comp_data_t comp_data = {
 		blk_in,		/* in */
 		blk_out,	/* out */
@@ -345,9 +442,11 @@ int lzjb_compress(const unsigned char * const blk_in,
 	};
 	struct comp_data_t * const data = &comp_data;
 
-	/* Initialize compression data structure */
+	DLOG("Comp: blk len 0x%x\n", length);
 
-	DLOG("Compressing block of length 0x%x\n", length);
+	/* Load arrays for match speedup */
+	index_bytes(data);
+
 	/* Scan through entire block looking for compressible items */
 	while (data->ipos < length) {
 
@@ -586,9 +685,9 @@ int main(int argc, char **argv)
 		/* Read input, compress it, write compressed output */
 		while((length = fread(blk, 1, B_SIZE, files->in))) {
 			if (ferror(files->in)) goto error_read;
-			DLOG("\n   ---\nCompressor: block %d\n", blocknum);
+			DLOG("\n---\nBlock %d\n", blocknum);
 			i = lzjb_compress(blk, out, options, length);
-			DLOG("Compressor returned %d bytes\n", i);
+			DLOG("c_size %d bytes\n", i);
 			i = fwrite(out, i, 1, files->out);
 			if (!i) goto error_write;
 			blocknum++;
@@ -600,17 +699,18 @@ int main(int argc, char **argv)
 			/* Read the length of the compressed data */
 			length = *blk;
 			length |= (*(blk + 1) << 8);
-			if (length > (B_SIZE + 8)) goto error_blocksize;
-			DLOG("\n   ---\nDecompressor: block %d of size %d\n", blocknum, length);
+			if (length > (B_SIZE + 8)) goto error_blocksize_d_prefix;
+			DLOG("\n---\nBlock %d, c_size %d\n", blocknum, length);
 			i = fread(blk, 1, length, files->in);
 			if (ferror(files->in)) goto error_read;
-			if (i != length) goto error_blocksize;
+			if (i != length) goto error_shortread;
 			length = lzjb_decompress(blk, out, i);
 			if (length < 0) goto error_decompress;
 			file_loc += length;
-			DLOG("[%x]: Decompressor returned %d bytes\n", file_loc, length);
+			DLOG("[%x]: unc_size %d bytes\n", file_loc, length);
+			if (length > B_SIZE) goto error_blocksize_decomp;
 			i = fwrite(out, 1, length, files->out);
-			DLOG("Wrote %d bytes\n", i);
+//			DLOG("Wrote %d bytes\n", i);
 			if (i != length) goto error_write;
 			blocknum++;
 		}
@@ -624,8 +724,14 @@ error_read:
 error_write:
 	fprintf(stderr, "error writing file %s (%d of %d written)\n", "stdout", i, length);
 	exit(EXIT_FAILURE);
-error_blocksize:
+error_shortread:
 	fprintf(stderr, "error: short read: %d < %d\n", i, length);
+	exit(EXIT_FAILURE);
+error_blocksize_d_prefix:
+	fprintf(stderr, "error: decompressor prefix too large (%d > %d) \n", length, (B_SIZE + 8));
+	exit(EXIT_FAILURE);
+error_blocksize_decomp:
+	fprintf(stderr, "error: decompressor overflow (%d > %d) \n", length, B_SIZE);
 	exit(EXIT_FAILURE);
 error_decompress:
 	fprintf(stderr, "error: cannot decompress block %d\n", blocknum);
@@ -636,3 +742,4 @@ usage:
 	fprintf(stderr, "\nlzjb -d   decompress stdin to stdout\n");
 	exit(EXIT_FAILURE);
 }
+
