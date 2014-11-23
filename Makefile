@@ -27,10 +27,10 @@ lzjb: lzjb.o
 	$(CC) -c $(BUILD_CFLAGS) $(FUSE_CFLAGS) $(CFLAGS) $<
 
 clean:
-	rm -f *.o *~ .*un~ lzjb debug.log *.?.gz
+	rm -f *.o *~ .*un~ lzjb debug.log *.?.gz log.test.* out.*
 
 distclean:
-	rm -f *.o *~ .*un~ lzjb debug.log *.?.gz *.pkg.tar.*
+	rm -f *.o *~ .*un~ lzjb debug.log *.?.gz log.test.* out.* *.pkg.tar.*
 
 install: all
 #	install -D -o root -g root -m 0644 lzjb.8.gz $(DESTDIR)/$(mandir)/man8/lzjb.8.gz

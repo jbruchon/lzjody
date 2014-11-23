@@ -20,6 +20,8 @@ Config.in
 /foo
 /lzjb
 /debug.log
+/log.test.*
+/out.*
 
 #
 # Backups / patches
