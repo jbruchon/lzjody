@@ -43,10 +43,10 @@ liblzjb.a:
 	$(CC) -c $(BUILD_CFLAGS) $(CFLAGS) $<
 
 clean:
-	rm -f *.o *.a *~ .*un~ lzjb *.so* debug.log *.?.gz log.test.* out.*
+	rm -f *.o *.a *~ .*un~ lzjb lzjb.static*.so* debug.log *.?.gz log.test.* out.*
 
 distclean:
-	rm -f *.o *.a *~ .*un~ lzjb *.so* debug.log *.?.gz log.test.* out.* *.pkg.tar.*
+	rm -f *.o *.a *~ .*un~ lzjb lzjb.static *.so* debug.log *.?.gz log.test.* out.* *.pkg.tar.*
 
 install: all
 	install -D -o root -g root -m 0755 lzjb $(bindir)/lzjb
