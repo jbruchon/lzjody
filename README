@@ -1,0 +1,25 @@
+                    LEMPEL-ZIV/JODY BRUCHON COMPRESSION
+                    ===================================
+
+     If you have any questions, comments, or patches, send me an email:
+                               jody@jodybruchon.com
+
+This code compresses and decompresses a data stream using a combination of
+compression techniques that are optimized for compressing disk image data.
+
+Compression methods used by this program include:
+
+* Run-length encoding (RLE), packing long repetitions of a single byte value
+  into a short value:length pair
+
+* Lempel-Ziv (dictionary-based) compression with optimized searching
+
+* Sequential increment compression, where 8-, 16-, and 32-bit values that
+  are incremented by 1 are converted to a pair consisting of an  inital value
+  and a count
+
+* Bit plane transformation, putting bytes at evenly spaced intervals together
+  to allow compression of some forms of otherwise incompressible data
+
+This software is licensed under the terms of the GNU General Public License
+version 2.
