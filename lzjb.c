@@ -32,7 +32,7 @@ static void bitplane_transform(unsigned char * const in,
 	if (opos != length) goto error_length;
 	return;
 error_length:
-	fprintf(stderr, "opos 0x%x != length 0x%x\n",opos,length);
+	fprintf(stderr, "liblzjb: internal error: bitplane_transform opos 0x%x != length 0x%x\n",opos,length);
 	exit(EXIT_FAILURE);
 }
 
@@ -61,10 +61,10 @@ static void index_bytes(struct comp_data_t * const data)
 	}
 	return;
 error_index:
-	fprintf(stderr, "error: data block length too short\n");
+	fprintf(stderr, "liblzjb: internal error: index_bytes data block length too short\n");
 	exit(EXIT_FAILURE);
 error_index_overflow:
-	fprintf(stderr, "error: index_bytes overflowed\n");
+	fprintf(stderr, "liblzjb: internal error: index_bytes overflowed\n");
 	exit(EXIT_FAILURE);
 }
 
@@ -398,6 +398,9 @@ extern int lzjb_compress(const unsigned char * const blk_in,
 		data->literals = length;
 		goto compress_short;
 	}
+
+	if (length > LZJB_BSIZE) goto error_length;
+
 	/* Load arrays for match speedup */
 	index_bytes(data);
 
@@ -432,6 +435,10 @@ compress_short:
 	if (data->opos >= length)
 		DLOG("warning: incompressible block\n");
 	return data->opos;
+error_length:
+	fprintf(stderr, "liblzjb: error: block length %d larger than maximum of %d\n",
+			length, LZJB_BSIZE);
+	exit(EXIT_FAILURE);
 }
 
 /* LZJB decompressor */
@@ -609,13 +616,13 @@ extern int lzjb_decompress(const unsigned char * const in,
 				break;
 
 			default:
-				fprintf(stderr, "Error: invalid mode 0x%x at 0x%x\n", mode, ipos);
+				fprintf(stderr, "liblzjb: error: invalid decompressor mode 0x%x at 0x%x\n", mode, ipos);
 				return -1;
 		}
 	}
 	return opos;
 error_seq:
-	fprintf(stderr, "data error: seq%d overflow (length 0x%x)\n", seqbits, length);
+	fprintf(stderr, "liblzjb: data error: seq%d overflow (length 0x%x)\n", seqbits, length);
 	exit(EXIT_FAILURE);
 }
 
