@@ -43,7 +43,7 @@ liblzjb.a:
 	$(CC) -c $(BUILD_CFLAGS) $(CFLAGS) $<
 
 clean:
-	rm -f *.o *.a *~ .*un~ lzjb lzjb.static*.so* debug.log *.?.gz log.test.* out.*
+	rm -f *.o *.a *~ .*un~ lzjb lzjb.static *.so* debug.log *.?.gz log.test.* out.*
 
 distclean:
 	rm -f *.o *.a *~ .*un~ lzjb lzjb.static *.so* debug.log *.?.gz log.test.* out.* *.pkg.tar.*
