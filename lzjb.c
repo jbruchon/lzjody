@@ -102,14 +102,14 @@ static void lzjb_write_control(struct comp_data_t * const data,
 	/* Standard control bytes */
 	else if (value > P_SHORT_MAX) {
 		DLOG("t: %x\n", type | (unsigned char)(value >> 8));
-		*(data->out + data->opos) = (type | (unsigned char)(value >> 8));
+		*(unsigned char *)(data->out + data->opos) = (type | (unsigned char)(value >> 8));
 		data->opos++;
 		DLOG("t+vH 0x%x, vL 0x%x\n", *(data->out + data->opos - 1), (unsigned char)value);
-		*(data->out + data->opos) = (unsigned char)value;
+		*(unsigned char *)(data->out + data->opos) = (unsigned char)value;
 		data->opos++;
 	} else {
 		/* For P_SHORT_MAX or less chars, use compact form */
-		*(data->out + data->opos) = (type | P_SHORT | value);
+		*(unsigned char *)(data->out + data->opos) = type | P_SHORT | value;
 		data->opos++;
 		DLOG("t+v 0x%x\n", data->opos - 1);
 	}

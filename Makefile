@@ -18,7 +18,7 @@ datarootdir=${prefix}/share
 datadir=${datarootdir}
 sysconfdir=${prefix}/etc
 
-all: lzjb lzjb.static test
+all: lzjb.o liblzjb.a liblzjb.so lzjb lzjb.static test
 
 lzjb.static: liblzjb.a lzjb_util.o
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(BUILD_CFLAGS) -o lzjb.static lzjb_util.o liblzjb.a
