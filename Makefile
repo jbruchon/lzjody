@@ -18,7 +18,7 @@ datarootdir=${prefix}/share
 datadir=${datarootdir}
 sysconfdir=${prefix}/etc
 
-all: lzjb lzjb.static
+all: lzjb lzjb.static test
 
 lzjb.static: liblzjb.a lzjb_util.o
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(BUILD_CFLAGS) -o lzjb.static lzjb_util.o liblzjb.a
@@ -54,6 +54,9 @@ install: all
 	install -D -o root -g root -m 0644 liblzjb.a $(libdir)/liblzjb.a
 	install -D -o root -g root -m 0644 lzjb.h $(includedir)/lzjb.h
 #	install -D -o root -g root -m 0644 lzjb.8.gz $(mandir)/man8/lzjb.8.gz
+
+test:
+	./test.sh
 
 package:
 	+./chroot_build.sh

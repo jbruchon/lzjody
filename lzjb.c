@@ -154,7 +154,7 @@ static int lzjb_find_lz(struct comp_data_t * const data)
 	unsigned int offset;
 
 	if (data->ipos >= (data->length - MIN_LZ_MATCH)) return 0;
-	/* Try using the new fancy speedup code! :D */
+
 	m0 = data->in + data->ipos;
 	total_scans = data->bytecnt[*m0];
 

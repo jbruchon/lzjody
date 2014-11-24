@@ -67,7 +67,7 @@ struct comp_data_t {
 	unsigned int literal_start;
 	unsigned int length;	/* Length of input data */
 	int fast_lz;	/* 0=exhaustive search, 1=stop at first match */
-	uint16_t byte[256][LZJB_BSIZE];	/* Lists of locations of each byte value */
+	uint16_t byte[256][MAX_LZ_BYTE_SCANS];	/* Lists of locations of each byte value */
 	uint16_t bytecnt[256];	/* How many offsets exist per byte */
 };
 
