@@ -10,7 +10,7 @@ int main(int argc, char **argv)
 {
 	struct files_t file_vars;
 	struct files_t *files = &file_vars;
-	unsigned char blk[LZJB_BSIZE + 8], out[LZJB_BSIZE + 8];
+	unsigned char blk[LZJB_BSIZE + 4], out[LZJB_BSIZE];
 	int i = 0;
 	int length;
 	unsigned char options = 0;
@@ -38,21 +38,30 @@ int main(int argc, char **argv)
 	if (!strncmp(argv[1], "-d", 2)) {
 		while(fread(blk, 1, 2, files->in)) {
 			file_loc += 2;
+
 			/* Read the length of the compressed data */
 			length = *blk;
 			length |= (*(blk + 1) << 8);
 			if (length > (LZJB_BSIZE + 8)) goto error_blocksize_d_prefix;
+
 			DLOG("\n---\nBlock %d, c_size %d\n", blocknum, length);
+
 			i = fread(blk, 1, length, files->in);
 			if (ferror(files->in)) goto error_read;
 			if (i != length) goto error_shortread;
+
 			length = lzjb_decompress(blk, out, i);
 			if (length < 0) goto error_decompress;
+
 			file_loc += length;
+
 			DLOG("[%x]: unc_size %d bytes\n", file_loc, length);
+
 			if (length > LZJB_BSIZE) goto error_blocksize_decomp;
+
 			i = fwrite(out, 1, length, files->out);
 //			DLOG("Wrote %d bytes\n", i);
+
 			if (i != length) goto error_write;
 			blocknum++;
 		}
