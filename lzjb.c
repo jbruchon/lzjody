@@ -38,6 +38,7 @@
 #define P_LIT	0x20	/* Literal values */
 #define P_LZL	0x10	/* LZ match flag: size > 255 */
 #define P_EXT	0x00	/* Extended algorithms (ignore 0x10 and P_SHORT) */
+#define P_PLANE 0x04	/* Bit-plane transform */
 #define P_SEQ32	0x03	/* Sequential 32-bit values */
 #define P_SEQ16	0x02	/* Sequential 16-bit values */
 #define P_SEQ8	0x01	/* Sequential 8-bit values */
@@ -90,6 +91,37 @@ struct comp_data_t {
 	uint16_t bytecnt[256];	/* How many offsets exist per byte */
 };
 
+/* Perform a bit plane transformation on some data
+ * For example, a 4-plane transform on "1200120112021023" would change
+ * that string into "1111222200000123", a string which is actually
+ * compressible, unlike the original. The resulting string has three
+ * RLE runs and one incremental sequence.
+ */
+static void bitplane_transform(unsigned char * const in,
+		unsigned char * const out, int length,
+		unsigned char num_planes)
+{
+	int i;
+	int plane = 0;
+	int opos = 0;
+
+	/* Split 'in' to bitplanes, placing result in 'out' */
+	while (plane < num_planes) {
+		i = plane;
+		while (i < length) {
+			*(out + opos) = *(in + i);
+			opos++;
+			i += num_planes;
+		}
+		plane++;
+	}
+	if (opos != length) goto error_length;
+	return;
+error_length:
+	fprintf(stderr, "opos 0x%x != length 0x%x\n",opos,length);
+	exit(EXIT_FAILURE);
+}
+
 /* Build an array of byte values for faster LZ matching */
 static void index_bytes(struct comp_data_t * const data)
 {
@@ -101,6 +133,7 @@ static void index_bytes(struct comp_data_t * const data)
 	for (int i = 0; i < 256; i++ ) data->bytecnt[i] = 0;
 
 	/* Read each byte and add its offset to its list */
+	if (data->length < MIN_LZ_MATCH) goto error_index;
 	while (pos < (data->length - MIN_LZ_MATCH)) {
 		c = *mem;
 		data->byte[c][data->bytecnt[c]] = pos;
@@ -110,12 +143,15 @@ static void index_bytes(struct comp_data_t * const data)
 //				data->bytecnt[c]);
 		mem++;
 		pos++;
-		if (data->bytecnt[c] > B_SIZE) {
-			fprintf(stderr, "error: index_bytes overflowed\n");
-			exit(EXIT_FAILURE);
-		}
+		if (data->bytecnt[c] > B_SIZE) goto error_index_overflow;
 	}
 	return;
+error_index:
+	fprintf(stderr, "error: data block length too short\n");
+	exit(EXIT_FAILURE);
+error_index_overflow:
+	fprintf(stderr, "error: index_bytes overflowed\n");
+	exit(EXIT_FAILURE);
 }
 
 /* Write the control byte(s) that define data
@@ -444,6 +480,10 @@ int lzjb_compress(const unsigned char * const blk_in,
 
 	DLOG("Comp: blk len 0x%x\n", length);
 
+	if (length < MIN_LZ_MATCH) {
+		data->literals = length;
+		goto compress_short;
+	}
 	/* Load arrays for match speedup */
 	index_bytes(data);
 
@@ -466,7 +506,8 @@ int lzjb_compress(const unsigned char * const blk_in,
 		}
 		}
 	}
-	
+
+compress_short:
 	/* Flush any remaining literals */
 	lzjb_flush_literals(data);
 
