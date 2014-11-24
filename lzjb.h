@@ -1,12 +1,11 @@
 #ifndef _LZJB_H
 #define _LZJB_H
 
-#define VER "0.1"
-#define VERDATE "2014-11-18"
+#define LZJB_VER "0.1"
+#define LZJB_VERDATE "2014-11-23"
 
 /* Debugging stuff */
-#ifndef NDEBUG
-// #define DEBUG 1
+#ifndef DLOG
  #ifdef DEBUG
   #define DLOG(...) fprintf(stderr, __VA_ARGS__)
  #else
@@ -15,7 +14,7 @@
 #endif
 
 /* Amount of data to process at a time */
-#define B_SIZE 4096
+#define LZJB_BSIZE 4096
 
 /* Top 3 bits of a control byte */
 #define P_SHORT	0x80	/* Compact control byte form */
@@ -59,11 +58,6 @@
 /* Options for the compressor */
 #define O_FAST_LZ 0x01
 
-struct files_t {
-	FILE *in;
-	FILE *out;
-};
-
 struct comp_data_t {
 	const unsigned char * const in;
 	unsigned char * const out;
@@ -73,7 +67,7 @@ struct comp_data_t {
 	unsigned int literal_start;
 	unsigned int length;	/* Length of input data */
 	int fast_lz;	/* 0=exhaustive search, 1=stop at first match */
-	uint16_t byte[256][B_SIZE];	/* Lists of locations of each byte value */
+	uint16_t byte[256][LZJB_BSIZE];	/* Lists of locations of each byte value */
 	uint16_t bytecnt[256];	/* How many offsets exist per byte */
 };
 

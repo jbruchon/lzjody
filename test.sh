@@ -1,9 +1,13 @@
 #!/bin/sh
+
 IN=test.input
 COMP=out.compressed
 OUT=out.final
 
-test ! -x ./lzjb && echo "Compile the program first." && exit 1
-./lzjb -c < $IN > $COMP 2>log.test.compress
-./lzjb -d < $COMP > $OUT 2>log.test.decompress
+LZJB=./lzjb
+test -x lzjb.static && LZJB=./lzjb.static
+
+test ! -x $LZJB && echo "Compile the program first." && exit 1
+$LZJB -c < $IN > $COMP 2>log.test.compress
+$LZJB -d < $COMP > $OUT 2>log.test.decompress
 sha1sum $IN $OUT

@@ -57,7 +57,7 @@ static void index_bytes(struct comp_data_t * const data)
 //				data->bytecnt[c]);
 		mem++;
 		pos++;
-		if (data->bytecnt[c] > B_SIZE) goto error_index_overflow;
+		if (data->bytecnt[c] > LZJB_BSIZE) goto error_index_overflow;
 	}
 	return;
 error_index:
@@ -307,7 +307,7 @@ static int lzjb_find_seq(struct comp_data_t * const data)
 	seqcnt = 0;
 	num32 = *m32;
 	/* Loop bounds check compensates for bit width of data elements */
-	while (((data->ipos + (seqcnt << 2) + 3) < B_SIZE) && (*m32 == num32)) {
+	while (((data->ipos + (seqcnt << 2) + 3) < LZJB_BSIZE) && (*m32 == num32)) {
 		seqcnt++;
 		num32++;
 		m32++;
@@ -328,7 +328,7 @@ static int lzjb_find_seq(struct comp_data_t * const data)
 	seqcnt = 0;
 	num16 = *m16;
 	/* Loop bounds check compensates for bit width of data elements */
-	while (((data->ipos + (seqcnt << 1) + 1) < B_SIZE) && (*m16 == num16)) {
+	while (((data->ipos + (seqcnt << 1) + 1) < LZJB_BSIZE) && (*m16 == num16)) {
 		seqcnt++;
 		num16++;
 		m16++;
@@ -348,7 +348,7 @@ static int lzjb_find_seq(struct comp_data_t * const data)
 	/* 8-bit sequences */
 	seqcnt = 0;
 	num8 = *m8;
-	while (((data->ipos + seqcnt) < B_SIZE) && (*m8 == num8)) {
+	while (((data->ipos + seqcnt) < LZJB_BSIZE) && (*m8 == num8)) {
 		seqcnt++;
 		num8++;
 		m8++;
@@ -558,7 +558,7 @@ extern int lzjb_decompress(const unsigned char * const in,
 				/* Get sequence start position */
 				m32 = (uint32_t *)((uintptr_t)out + (uintptr_t)opos);
 				opos += (length << 2);
-				if (opos > B_SIZE) goto error_seq;
+				if (opos > LZJB_BSIZE) goto error_seq;
 				DLOG("opos = 0x%x, length = 0x%x\n", opos, length);
 				while (length > 0) {
 					DLOG("1:%p\n", (void *)m32);
@@ -580,7 +580,7 @@ extern int lzjb_decompress(const unsigned char * const in,
 				m16 = (uint16_t *)((uintptr_t)out + (uintptr_t)opos);
 				DLOG("opos = 0x%x, length = 0x%x\n", opos, length);
 				opos += (length << 1);
-				if (opos > B_SIZE) goto error_seq;
+				if (opos > LZJB_BSIZE) goto error_seq;
 				while (length > 0) {
 					DLOG("1:%p,0x%x\n", (void *)m16, length);
 					*m16 = num16;
@@ -600,7 +600,7 @@ extern int lzjb_decompress(const unsigned char * const in,
 				/* Get sequence start position */
 				m8 = (uint8_t *)((uintptr_t)out + (uintptr_t)opos);
 				opos += length;
-				if (opos > B_SIZE) goto error_seq;
+				if (opos > LZJB_BSIZE) goto error_seq;
 				while (length > 0) {
 					*m8 = num8;
 					m8++; num8++;
@@ -616,85 +616,6 @@ extern int lzjb_decompress(const unsigned char * const in,
 	return opos;
 error_seq:
 	fprintf(stderr, "data error: seq%d overflow (length 0x%x)\n", seqbits, length);
-	exit(EXIT_FAILURE);
-}
-
-int main(int argc, char **argv)
-{
-	struct files_t file_vars;
-	struct files_t *files = &file_vars;
-	unsigned char blk[B_SIZE + 8], out[B_SIZE + 8];
-	int i = 0;
-	int length;
-	unsigned char options = 0;
-	int blocknum = 0;
-	unsigned int file_loc = 0;
-
-	if (argc < 2) goto usage;
-	files->in = stdin;
-	files->out = stdout;
-	/* Set FAST_LZ */
-	/* options |= O_FAST_LZ; */
-
-	if (!strncmp(argv[1], "-c", 2)) {
-		/* Read input, compress it, write compressed output */
-		while((length = fread(blk, 1, B_SIZE, files->in))) {
-			if (ferror(files->in)) goto error_read;
-			DLOG("\n---\nBlock %d\n", blocknum);
-			i = lzjb_compress(blk, out, options, length);
-			DLOG("c_size %d bytes\n", i);
-			i = fwrite(out, i, 1, files->out);
-			if (!i) goto error_write;
-			blocknum++;
-		}
-	}
-	if (!strncmp(argv[1], "-d", 2)) {
-		while(fread(blk, 1, 2, files->in)) {
-			file_loc += 2;
-			/* Read the length of the compressed data */
-			length = *blk;
-			length |= (*(blk + 1) << 8);
-			if (length > (B_SIZE + 8)) goto error_blocksize_d_prefix;
-			DLOG("\n---\nBlock %d, c_size %d\n", blocknum, length);
-			i = fread(blk, 1, length, files->in);
-			if (ferror(files->in)) goto error_read;
-			if (i != length) goto error_shortread;
-			length = lzjb_decompress(blk, out, i);
-			if (length < 0) goto error_decompress;
-			file_loc += length;
-			DLOG("[%x]: unc_size %d bytes\n", file_loc, length);
-			if (length > B_SIZE) goto error_blocksize_decomp;
-			i = fwrite(out, 1, length, files->out);
-//			DLOG("Wrote %d bytes\n", i);
-			if (i != length) goto error_write;
-			blocknum++;
-		}
-	}
-
-	exit(EXIT_SUCCESS);
-
-error_read:
-	fprintf(stderr, "error reading file %s\n", "stdin");
-	exit(EXIT_FAILURE);
-error_write:
-	fprintf(stderr, "error writing file %s (%d of %d written)\n", "stdout", i, length);
-	exit(EXIT_FAILURE);
-error_shortread:
-	fprintf(stderr, "error: short read: %d < %d\n", i, length);
-	exit(EXIT_FAILURE);
-error_blocksize_d_prefix:
-	fprintf(stderr, "error: decompressor prefix too large (%d > %d) \n", length, (B_SIZE + 8));
-	exit(EXIT_FAILURE);
-error_blocksize_decomp:
-	fprintf(stderr, "error: decompressor overflow (%d > %d) \n", length, B_SIZE);
-	exit(EXIT_FAILURE);
-error_decompress:
-	fprintf(stderr, "error: cannot decompress block %d\n", blocknum);
-	exit(EXIT_FAILURE);
-usage:
-	fprintf(stderr, "lzjb version %s, an LZ compression algorithm by Jody Bruchon (%s)\n", VER, VERDATE);
-	fprintf(stderr, "\nlzjb -c   compress stdin to stdout\n");
-	fprintf(stderr, "\nlzjb -d   decompress stdin to stdout\n");
 	exit(EXIT_FAILURE);
 }
 
