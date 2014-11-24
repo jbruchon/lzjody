@@ -1,12 +1,10 @@
 CC=gcc
 AR=ar
-#CFLAGS=-Os -flto -ffunction-sections -fdata-sections -fno-unwind-tables -fno-asynchronous-unwind-tables
 CFLAGS=-O3 -g
 #CFLAGS=-Og -g3
 BUILD_CFLAGS=-std=gnu99 -I. -D_FILE_OFFSET_BITS=64 -pipe -Wall -pedantic -I.
-#LDFLAGS=-s -Wl,--gc-sections
-#LDFLAGS=
-LDLIBS=-L.
+LDFLAGS=-L.
+LDLIBS=
 
 prefix=${DESTDIR}/usr
 exec_prefix=${prefix}
@@ -18,7 +16,7 @@ datarootdir=${prefix}/share
 datadir=${datarootdir}
 sysconfdir=${prefix}/etc
 
-all: lzjb.o liblzjb.a liblzjb.so lzjb lzjb.static test
+all: lzjb lzjb.static test
 
 lzjb.static: liblzjb.a lzjb_util.o
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(BUILD_CFLAGS) -o lzjb.static lzjb_util.o liblzjb.a
@@ -26,13 +24,11 @@ lzjb.static: liblzjb.a lzjb_util.o
 lzjb: liblzjb.so lzjb_util.o
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(BUILD_CFLAGS) -llzjb -o lzjb lzjb_util.o
 
-lzjb.o: liblzjb.so liblzjb.a
-
-liblzjb.so:
+liblzjb.so: lzjb.o
 	$(CC) -c $(BUILD_CFLAGS) -fPIC $(CFLAGS) lzjb.c
 	$(CC) -shared -o liblzjb.so lzjb.o
 
-liblzjb.a:
+liblzjb.a: lzjb.o
 	$(CC) -c $(BUILD_CFLAGS) $(CFLAGS) lzjb.c
 	$(AR) rcs liblzjb.a lzjb.o
 
