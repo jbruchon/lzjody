@@ -8,9 +8,11 @@ BUILD_CFLAGS=-std=gnu99 -I. -D_FILE_OFFSET_BITS=64 -pipe -Wall -pedantic -I.
 #LDFLAGS=
 LDLIBS=-L.
 
-prefix=/usr
+prefix=${DESTDIR}/usr
 exec_prefix=${prefix}
 bindir=${exec_prefix}/bin
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
 mandir=${prefix}/man
 datarootdir=${prefix}/share
 datadir=${datarootdir}
@@ -47,8 +49,11 @@ distclean:
 	rm -f *.o *.a *~ .*un~ lzjb *.so* debug.log *.?.gz log.test.* out.* *.pkg.tar.*
 
 install: all
-#	install -D -o root -g root -m 0644 lzjb.8.gz $(DESTDIR)/$(mandir)/man8/lzjb.8.gz
-	install -D -o root -g root -m 0755 -s lzjb $(DESTDIR)/$(bindir)/lzjb
+	install -D -o root -g root -m 0755 lzjb $(bindir)/lzjb
+	install -D -o root -g root -m 0755 liblzjb.so $(libdir)/liblzjb.so
+	install -D -o root -g root -m 0644 liblzjb.a $(libdir)/liblzjb.a
+	install -D -o root -g root -m 0644 lzjb.h $(includedir)/lzjb.h
+#	install -D -o root -g root -m 0644 lzjb.8.gz $(mandir)/man8/lzjb.8.gz
 
 package:
 	+./chroot_build.sh
