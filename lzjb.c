@@ -119,7 +119,7 @@ error_value_too_large:
 /* Write out all pending literals */
 static void lzjb_flush_literals(struct comp_data_t * const data)
 {
-	int i = 0;
+	unsigned int i = 0;
 
 	if (data->literals == 0) return;
 	DLOG("flush_literals: 0x%x\n", data->literals);
@@ -385,7 +385,7 @@ static int lzjb_find_seq(struct comp_data_t * const data)
 extern int lzjb_compress(const unsigned char * const blk_in,
 		unsigned char * const blk_out,
 		const unsigned int options,
-		const int length)
+		const unsigned int length)
 {
 	/* Initialize compression data structure */
 	struct comp_data_t comp_data = {
@@ -440,8 +440,8 @@ compress_short:
 	*(unsigned char *)(data->out) = (unsigned char)(data->opos - 2);
 	*(unsigned char *)(data->out + 1) = (unsigned char)(((data->opos - 2) & 0xff00) >> 8);
 
-	if (data->opos >= length)
-		DLOG("warning: incompressible block\n");
+	if (data->opos >= length) {
+		DLOG("warning: incompressible block\n"); }
 	DLOG("compressed length: %x\n", data->opos);
 	return data->opos;
 error_length:
@@ -465,6 +465,8 @@ extern int lzjb_decompress(const unsigned char * const in,
 	unsigned char c;
 	unsigned char *mem1;
 	unsigned char *mem2;
+	/* FIXME: volatile to prevent vectorization (-fno-tree-loop-vectorize)
+	 * Should probably find another way to prevent unaligned vector access */
 	volatile uint32_t *m32;
 	volatile uint16_t *m16;
 	volatile uint8_t *m8;

@@ -73,7 +73,7 @@ struct comp_data_t {
 
 
 extern int lzjb_compress(const unsigned char * const, unsigned char * const,
-		const unsigned int, const int);
+		const unsigned int, const unsigned int);
 extern int lzjb_decompress(const unsigned char * const in,
 		unsigned char * const out, const unsigned int size);
 

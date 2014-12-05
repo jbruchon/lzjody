@@ -2,7 +2,7 @@ CC=gcc
 AR=ar
 CFLAGS=-O3 -g
 #CFLAGS=-Og -g3
-BUILD_CFLAGS=-std=gnu99 -I. -D_FILE_OFFSET_BITS=64 -pipe -Wall -pedantic -I.
+BUILD_CFLAGS=-std=gnu99 -I. -D_FILE_OFFSET_BITS=64 -pipe -Wall -pedantic
 LDFLAGS=-L.
 LDLIBS=
 
