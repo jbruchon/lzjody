@@ -20,6 +20,7 @@ Compression methods used by this program include:
 
 * Bit plane transformation, putting bytes at evenly spaced intervals together
   to allow compression of some forms of otherwise incompressible data
+  (This method is a work in progress and does not currently execute.)
 
 The decompression utility uses POSIX threads by default. If you want to use
 a smaller, much simpler, and slower non-threaded version, tell make:
