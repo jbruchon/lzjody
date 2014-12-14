@@ -28,9 +28,11 @@
 #include <lzjb.h>
 #include "lzjb_util.h"
 
+#define CHUNK 64
+
 struct thread_info {
-	unsigned char blk[LZJB_BSIZE + 4];	/* Thread input block */
-	unsigned char out[LZJB_BSIZE + 4];	/* Thread output block */
+	unsigned char blk[LZJB_BSIZE * CHUNK];	/* Thread input blocks */
+	unsigned char out[(LZJB_BSIZE + 4) * CHUNK];	/* Thread output blocks */
 	pthread_t id;	/* Thread ID */
 	char options;	/* Compressor options */
 	int working;	/* Is thread working (1) or idle (0)? */
@@ -47,8 +49,21 @@ struct files_t * const files = &file_vars;
 static void *compress_thread(void *arg)
 {
 	struct thread_info *thr = arg;
+	unsigned char *ipos = thr->blk;	/* Uncompressed input pointer */
+	unsigned char *opos = thr->out;	/* Compressed output pointer */
+	int i;
+	int bsize;	/* Compressor block size */
+	int remain = thr->length;	/* Remaining input bytes */
 
-	thr->o_length = lzjb_compress(thr->blk, thr->out, thr->options, thr->length);
+	while (remain) {
+		if (remain > LZJB_BSIZE) bsize = LZJB_BSIZE;
+		else bsize = remain;
+		i = lzjb_compress(ipos, opos, thr->options, bsize);
+		ipos += bsize;
+		opos += i;
+		thr->o_length += i;
+		remain -= bsize;
+	}
 	thr->working = 0;
 	pthread_cond_signal(&cond);
 
@@ -83,14 +98,15 @@ int main(int argc, char **argv)
 		nprocs = 1;
 	}
 #endif
+	nprocs <<= 2;
 
 	fprintf(stderr, "Using %d processors\n", nprocs);
-	/* Allocate per-thread input/output memory and control blocks */
-	thr = (struct thread_info *)calloc(nprocs, sizeof(struct thread_info));
-	if (!thr) goto oom;
 
 	if (!strncmp(argv[1], "-c", 2)) {
 		/* Read input, compress it, write compressed output */
+		/* Allocate per-thread input/output memory and control blocks */
+		thr = (struct thread_info *)calloc(nprocs, sizeof(struct thread_info));
+		if (!thr) goto oom;
 
 		/* Set compressor options */
 		for (i = 0; i < nprocs; i++) (thr + i)->options = options;
@@ -147,9 +163,9 @@ int main(int argc, char **argv)
 					}
 
 					/* Read next block */
-					length = fread(cur->blk, 1, LZJB_BSIZE, files->in);
+					length = fread(cur->blk, 1, (LZJB_BSIZE * CHUNK), files->in);
 					if (ferror(files->in)) goto error_read;
-					if (length < LZJB_BSIZE) eof = 1;
+					if (length < (LZJB_BSIZE * CHUNK)) eof = 1;
 					if (length > 0) {
 						blocknum++;
 
@@ -157,6 +173,7 @@ int main(int argc, char **argv)
 						cur->working = 1;
 						cur->block = blocknum;
 						cur->length = length;
+						cur->o_length = 0;
 						running++;
 						fprintf(stderr, "Thread %d start\n", open_thr);
 
@@ -177,8 +194,10 @@ int main(int argc, char **argv)
 
 	/* Decompress */
 	if (!strncmp(argv[1], "-d", 2)) {
-		blk = thr->blk;
-		out = thr->out;
+		blk = (unsigned char *)malloc(LZJB_BSIZE + 4);
+		if (!blk) goto oom;
+		out = (unsigned char *)malloc(LZJB_BSIZE);
+		if (!out) goto oom;
 		while(fread(blk, 1, 2, files->in)) {
 			/* Read the length of the compressed data */
 			length = *blk;
