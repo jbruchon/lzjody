@@ -33,12 +33,12 @@
 struct thread_info {
 	unsigned char blk[LZJB_BSIZE * CHUNK];	/* Thread input blocks */
 	unsigned char out[(LZJB_BSIZE + 4) * CHUNK];	/* Thread output blocks */
-	pthread_t id;	/* Thread ID */
 	char options;	/* Compressor options */
-	int working;	/* Is thread working (1) or idle (0)? */
+	pthread_t id;	/* Thread ID */
 	int block;	/* What block is thread working on? */
 	int length;	/* Total bytes in block */
 	int o_length;	/* Output length */
+	int working;	/* Is thread working (1) or idle (0)? */
 };
 
 pthread_mutex_t mtx = PTHREAD_MUTEX_INITIALIZER;
@@ -48,22 +48,21 @@ struct files_t * const files = &file_vars;
 
 static void *compress_thread(void *arg)
 {
-	struct thread_info *thr = arg;
-	unsigned char *ipos = thr->blk;	/* Uncompressed input pointer */
+	struct thread_info * const thr = arg;
+	const unsigned char *ipos = thr->blk;	/* Uncompressed input pointer */
 	unsigned char *opos = thr->out;	/* Compressed output pointer */
 	int i;
-	int bsize;	/* Compressor block size */
+	int bsize = LZJB_BSIZE;	/* Compressor block size */
 	int remain = thr->length;	/* Remaining input bytes */
 
 	while (remain) {
-		if (remain > LZJB_BSIZE) bsize = LZJB_BSIZE;
-		else bsize = remain;
+		if (remain < LZJB_BSIZE) bsize = remain;
 		i = lzjb_compress(ipos, opos, thr->options, bsize);
 		ipos += bsize;
 		opos += i;
-		thr->o_length += i;
 		remain -= bsize;
 	}
+	thr->o_length = opos - thr->out;
 	thr->working = 0;
 	pthread_cond_signal(&cond);
 
@@ -150,7 +149,7 @@ int main(int argc, char **argv)
 					/* Find next open thread */
 					cur = thr;
 					for (open_thr = 0; open_thr < nprocs; open_thr++) {
-						if (cur->working == 0) break;
+						if (cur->working == 0 && cur->block == 0) break;
 						cur++;
 					}
 
