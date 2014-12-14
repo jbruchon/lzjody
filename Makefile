@@ -16,10 +16,13 @@ datarootdir=${prefix}/share
 datadir=${datarootdir}
 sysconfdir=${prefix}/etc
 
-all: lzjb lzjb.static lzjb_parallel.static test
+# Use POSIX threads by default, but allow the user to override them
+ifndef NOTHREADS
+LDFLAGS += -lpthread
+BUILD_CFLAGS += -DTHREADED
+endif
 
-lzjb_parallel.static: liblzjb.a lzjb_util.o lzjb_parallel.o
-	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(BUILD_CFLAGS) -lpthread -o lzjb_parallel.static lzjb_parallel.o liblzjb.a
+all: lzjb lzjb.static test
 
 lzjb.static: liblzjb.a lzjb_util.o
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(BUILD_CFLAGS) -o lzjb.static lzjb_util.o liblzjb.a
@@ -27,11 +30,11 @@ lzjb.static: liblzjb.a lzjb_util.o
 lzjb: liblzjb.so lzjb_util.o
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(BUILD_CFLAGS) -llzjb -o lzjb lzjb_util.o
 
-liblzjb.so: lzjb.o
+liblzjb.so:
 	$(CC) -c $(BUILD_CFLAGS) -fPIC $(CFLAGS) lzjb.c
 	$(CC) -shared -o liblzjb.so lzjb.o
 
-liblzjb.a: lzjb.o
+liblzjb.a:
 	$(CC) -c $(BUILD_CFLAGS) $(CFLAGS) lzjb.c
 	$(AR) rcs liblzjb.a lzjb.o
 
@@ -54,7 +57,7 @@ install: all
 	install -D -o root -g root -m 0644 lzjb.h $(includedir)/lzjb.h
 #	install -D -o root -g root -m 0644 lzjb.8.gz $(mandir)/man8/lzjb.8.gz
 
-test:
+test: lzjb.static
 	./test.sh
 
 package:
