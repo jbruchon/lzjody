@@ -24,28 +24,19 @@
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <pthread.h>
 #include <lzjb.h>
 #include "lzjb_util.h"
 
-#define CHUNK 64
-
-struct thread_info {
-	unsigned char blk[LZJB_BSIZE * CHUNK];	/* Thread input blocks */
-	unsigned char out[(LZJB_BSIZE + 4) * CHUNK];	/* Thread output blocks */
-	char options;	/* Compressor options */
-	pthread_t id;	/* Thread ID */
-	int block;	/* What block is thread working on? */
-	int length;	/* Total bytes in block */
-	int o_length;	/* Output length */
-	int working;	/* Is thread working (1) or idle (0)? */
-};
-
+#ifdef THREADED
+#include <pthread.h>
 pthread_mutex_t mtx = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t cond;	/* pthreads change condition */
+#endif
+
 struct files_t file_vars;
 struct files_t * const files = &file_vars;
 
+#ifdef THREADED
 static void *compress_thread(void *arg)
 {
 	struct thread_info * const thr = arg;
@@ -68,41 +59,59 @@ static void *compress_thread(void *arg)
 
 	return 0;
 }
+#endif /* THREADED */
 
 int main(int argc, char **argv)
 {
+	unsigned char *blk, *out;
+	int i;
+	int length = 0;	/* Incoming data block length counter */
+	int blocknum = 0;	/* Current block number */
+	unsigned char options = 0;	/* Compressor options */
+#ifdef THREADED
 	struct thread_info *thr;
 	struct thread_info *cur;
-	unsigned char *blk, *out;
-	int i, thread;
-	int length = 0;
-	int eof = 0;	/* end of file? */
-	int open_thr;	/* next open thread */
-	uint32_t min_blk;	/* minimum block number */
-	unsigned int min_thread;	/* thread for min_blk */
-	unsigned char options = 0;
-	int blocknum = 0;
+	uint32_t min_blk;	/* Minimum block number */
+	unsigned int min_thread;	/* Thread for min_blk */
+	int thread;	/* Temporary thread scan counter */
+	int open_thr;	/* Next open thread */
 	int nprocs = 1;		/* Number of processors */
 	char running = 0;	/* Number of threads running */
+	int eof = 0;	/* End of file? */
+#endif /* THREADED */
 
 	if (argc < 2) goto usage;
 	files->in = stdin;
 	files->out = stdout;
 
-	/* Get number of online processors for pthreads */
-#ifdef _SC_NPROCESSORS_ONLN
-	nprocs = (int)sysconf(_SC_NPROCESSORS_ONLN);
-	if (nprocs < 1) {
-		fprintf(stderr, "warning: system returned bad number of processors: %d\n", nprocs);
-		nprocs = 1;
-	}
-#endif
-	nprocs <<= 2;
-
-	fprintf(stderr, "Using %d processors\n", nprocs);
-
 	if (!strncmp(argv[1], "-c", 2)) {
 		/* Read input, compress it, write compressed output */
+#ifndef THREADED
+		/* Non-threaded compression */
+		blk = (unsigned char *)malloc(LZJB_BSIZE);
+		if (!blk) goto oom;
+		out = (unsigned char *)malloc(LZJB_BSIZE + 4);
+		if (!out) goto oom;
+		while((length = fread(blk, 1, LZJB_BSIZE, files->in))) {
+			if (ferror(files->in)) goto error_read;
+			i = lzjb_compress(blk, out, options, length);
+			DLOG("c_size %d bytes\n", i);
+			i = fwrite(out, i, 1, files->out);
+			if (!i) goto error_write;
+			blocknum++;
+		}
+#else /* Using POSIX threads */
+		/* Get number of online processors for pthreads */
+ #ifdef _SC_NPROCESSORS_ONLN
+		nprocs = (int)sysconf(_SC_NPROCESSORS_ONLN);
+		if (nprocs < 1) {
+			fprintf(stderr, "warning: system returned bad number of processors: %d\n", nprocs);
+			nprocs = 1;
+		}
+ #endif /* _SC_NPROCESSORS_ONLN */
+		nprocs <<= 2;
+		fprintf(stderr, "lzjb: compressing with %d worker threads\n", nprocs);
+
 		/* Allocate per-thread input/output memory and control blocks */
 		thr = (struct thread_info *)calloc(nprocs, sizeof(struct thread_info));
 		if (!thr) goto oom;
@@ -189,6 +198,7 @@ int main(int argc, char **argv)
 				}
 			}
 		}
+#endif /* THREADED */
 	}
 
 	/* Decompress */

@@ -24,7 +24,7 @@
 #include <lzjb.h>
 
 #define LZJB_UTIL_VER "0.1"
-#define LZJB_UTIL_VERDATE "2014-11-23"
+#define LZJB_UTIL_VERDATE "2014-12-14"
 
 /* Debugging stuff */
 #ifndef DLOG
@@ -35,9 +35,27 @@
  #endif
 #endif
 
+/* Use POSIX threads in compression utility  (define this in Makefile) */
+/* #define THREADED 1 */
+
 struct files_t {
 	FILE *in;
 	FILE *out;
+};
+
+/* Number of LZJB_BSIZE blocks to process per thread */
+#define CHUNK 64
+
+/* Per-thread working state */
+struct thread_info {
+	unsigned char blk[LZJB_BSIZE * CHUNK];	/* Thread input blocks */
+	unsigned char out[(LZJB_BSIZE + 4) * CHUNK];	/* Thread output blocks */
+	char options;	/* Compressor options */
+	pthread_t id;	/* Thread ID */
+	int block;	/* What block is thread working on? */
+	int length;	/* Total bytes in block */
+	int o_length;	/* Output length */
+	int working;	/* Is thread working (1) or idle (0)? */
 };
 
 #endif	/* _LZJB_UTIL_H */
