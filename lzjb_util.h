@@ -44,7 +44,7 @@ struct files_t {
 };
 
 /* Number of LZJB_BSIZE blocks to process per thread */
-#define CHUNK 64
+#define CHUNK 1024
 
 /* Per-thread working state */
 struct thread_info {

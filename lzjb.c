@@ -25,34 +25,58 @@
 #include <fcntl.h>
 #include "lzjb.h"
 
+static int lzjb_find_lz(struct comp_data_t * const data);
+static int lzjb_find_rle(struct comp_data_t * const data);
+static int lzjb_find_seq(struct comp_data_t * const data);
+
 /* Perform a bit plane transformation on some data
  * For example, a 4-plane transform on "1200120112021023" would change
  * that string into "1111222200000123", a string which is actually
  * compressible, unlike the original. The resulting string has three
  * RLE runs and one incremental sequence.
+ * Passing a negative num_planes reverses the transformation.
  */
-static void bitplane_transform(unsigned char * const in,
+static void bitplane_transform(const unsigned char * const in,
 		unsigned char * const out, int length,
-		unsigned char num_planes)
+		char num_planes)
 {
 	int i;
 	int plane = 0;
 	int opos = 0;
 
-	/* Split 'in' to bitplanes, placing result in 'out' */
-	while (plane < num_planes) {
-		i = plane;
-		while (i < length) {
-			*(out + opos) = *(in + i);
-			opos++;
-			i += num_planes;
+	if (num_planes > 1) {
+		/* Split 'in' to bitplanes, placing result in 'out' */
+		while (plane < num_planes) {
+			i = plane;
+			while (i < length) {
+				*(out + opos) = *(in + i);
+				opos++;
+				i += num_planes;
+			}
+			plane++;
 		}
-		plane++;
+	} else if (num_planes > -1) goto error_planes;
+	else {
+		num_planes = -num_planes;
+		while (plane < num_planes) {
+			i = plane;
+			while (i < length) {
+				*(out + i) = *(in + opos);
+				opos++;
+				i += num_planes;
+			}
+			plane++;
+		}
+
 	}
 	if (opos != length) goto error_length;
 	return;
+
+error_planes:
+	fprintf(stderr, "liblzjb: bitplane_transform passed invalid plane count %d\n", num_planes);
+	exit(EXIT_FAILURE);
 error_length:
-	fprintf(stderr, "liblzjb: internal error: bitplane_transform opos 0x%x != length 0x%x\n",opos,length);
+	fprintf(stderr, "liblzjb: internal error: bitplane_transform opos 0x%x != length 0x%x\n", opos, length);
 	exit(EXIT_FAILURE);
 }
 
@@ -102,17 +126,18 @@ static void lzjb_write_control(struct comp_data_t * const data,
 			DLOG("t0x%x ", type);
 			*(data->out + data->opos) = (value >> 8);
 			data->opos++;
-			DLOG("vH 0x%x ", (value >> 8));
+			DLOG("vH 0x%x ", (uint8_t)(value >> 8));
 			*(data->out + data->opos) = value;
 			data->opos++;
-			DLOG("vL 0x%x\n", value);
+			DLOG("vL 0x%x\n", (uint8_t)value);
 		} else {
 			/* For P_SHORT_XMAX or less, use compact form */
 			*(data->out + data->opos) = (type | P_SHORT);
 			data->opos++;
 			DLOG("t 0x%x\n", type);
-			*(data->out + data->opos) = value;
+			*(data->out + data->opos) = (uint8_t)value;
 			data->opos++;
+			DLOG("v 0x%x\n", (uint8_t)value);
 		}
 		return;
 	}
@@ -136,18 +161,95 @@ error_value_too_large:
 	exit(EXIT_FAILURE);
 }
 
-/* Write out all pending literals */
-static void lzjb_flush_literals(struct comp_data_t * const data)
+/* Write out all pending literals without further processing */
+static void lzjb_really_flush_literals(struct comp_data_t * const data)
 {
 	unsigned int i = 0;
 
 	if (data->literals == 0) return;
-	DLOG("flush_literals: 0x%x\n", data->literals);
+	DLOG("really_flush_literals: 0x%x\n", data->literals);
 	/* First write the control byte... */
 	lzjb_write_control(data, P_LIT, data->literals);
 	/* ...then the literal bytes. */
 	while (i < data->literals) {
 		*(data->out + data->opos) = *(data->in + data->literal_start + i);
+		data->opos++;
+		i++;
+	}
+	/* Reset literal counter*/
+	data->literals = 0;
+}
+
+/* Intercept a stream of literals and try bit plane transformation */
+static void lzjb_flush_literals(struct comp_data_t * const data)
+{
+	unsigned char lit_in[LZJB_BSIZE + 4];
+	unsigned char lit_out[LZJB_BSIZE + 4];
+	unsigned int i = 0;
+
+	/* Initialize compression data structure */
+	struct comp_data_t d2;
+	struct comp_data_t * const data2 = &d2;
+
+	/* For zero literals we'll just do nothing. */
+	if (data->literals == 0) return;
+
+	d2.in = lit_in;
+	d2.out = lit_out;
+	d2.ipos = 0;
+	d2.opos = 0;
+	d2.literals = 0;
+	d2.literal_start = 0;
+	d2.length = data->literals;
+	/* Don't allow recursive passes or compressed data size prefix */
+	d2.options = (data->options | O_REALFLUSH | O_NOPREFIX);
+
+	DLOG("flush_literals: 0x%x\n", data->literals);
+
+	/* Handle blocking of recursive calls or very short literal runs */
+	if ((data->literals < MIN_RLE_LENGTH + MIN_PLANE_LENGTH)
+			|| (data->options & O_REALFLUSH)) {
+		DLOG("bypass further compression\n");
+		lzjb_really_flush_literals(data);
+		return;
+	}
+
+	/* Try to compress a literal run further */
+	DLOG("compress further: 0x%x @ 0x%x\n", data->literals, data->literal_start);
+	/* Make a transformed copy of the data */
+	bitplane_transform((data->in + data->literal_start),
+			lit_in, data->literals, 4);
+
+	/* Try to compress the data again */
+	while (data2->ipos < data->literals) {
+		DLOG("[bp] ipos: 0x%x\n", data2->ipos);
+		if (!lzjb_find_rle(data2)) {
+		if (!lzjb_find_lz(data2))  {
+		if (!lzjb_find_seq(data2)) {
+			if (data2->literals == 0)
+				data2->literal_start = data2->ipos;
+			data2->literals++;
+			data2->ipos++;
+		}
+		}
+		}
+	}
+	lzjb_really_flush_literals(data2);
+
+	/* If there was no improvement, give up */
+	if ((data2->opos + MIN_PLANE_LENGTH) >= data2->length) {
+		DLOG("No improvement, skipping (0x%x >= 0x%x)\n",
+				data2->opos + MIN_PLANE_LENGTH,
+				data2->length);
+		lzjb_really_flush_literals(data);
+		return;
+	}
+
+	/* Dump the newly compressed data as a literal stream */
+	DLOG("Improvement: 0x%x -> 0x%x\n", data2->length, data2->opos);
+	lzjb_write_control(data, P_PLANE, data2->opos);
+	while (i < data2->opos) {
+		*(data->out + data->opos) = *(data2->out + i);
 		data->opos++;
 		i++;
 	}
@@ -159,16 +261,16 @@ static void lzjb_flush_literals(struct comp_data_t * const data)
 /* Find best LZ data match for current input position */
 static int lzjb_find_lz(struct comp_data_t * const data)
 {
-	unsigned int scan = 0;
+	int scan = 0;
 	const unsigned char *m0, *m1, *m2;	/* pointers for matches */
-	unsigned int length;	/* match length */
+	int length;	/* match length */
 	const unsigned int in_remain = data->length - data->ipos;
 	int remain;	/* remaining matches possible */
 	int done = 0;	/* Used to terminate matching */
-	unsigned int best_lz = 0;
-	unsigned int best_lz_start = 0;
+	int best_lz = 0;
+	int best_lz_start = 0;
 	unsigned int total_scans;
-	unsigned int offset;
+	int offset;
 
 	if (data->ipos >= (data->length - MIN_LZ_MATCH)) return 0;
 
@@ -194,16 +296,23 @@ static int lzjb_find_lz(struct comp_data_t * const data)
 		}
 
 		remain = data->length - data->ipos;
+		/* If we can't possibly hit the minimum match, give up immediately */
+		if (remain < MIN_LZ_MATCH) goto end_lz_matches;
+
 		m2 = data->in + offset;
 /*		DLOG("LZ: offset 0x%x, remain 0x%x, scan 0x%x, total_scans 0x%x\n",
-		    offset, remain, scan, total_scans);
-*/		while (*m1 == *m2) {
+		    offset, remain, scan, total_scans); */
+
+		/* Try to reject the match quickly */
+		if (*(m1 + MIN_LZ_MATCH - 1) != *(m2 + MIN_LZ_MATCH - 1)) goto end_lz_matches;
+
+		while (*m1 == *m2) {
 /*			DLOG("LZ: m1 0x%lx == m2 0x%lx (remain %x)\n",
 					(long)((uintptr_t)m1 - (uintptr_t)(data->in)),
 					(long)((uintptr_t)m2 - (uintptr_t)(data->in)),
 					remain
-					);
-*/			length++;
+					); */
+			length++;
 			m1++; m2++;
 			remain--;
 			if (!remain) {
@@ -223,7 +332,7 @@ end_lz_jump_match:
 			DLOG("LZ match: 0x%x : 0x%x (j)\n", offset, length);
 			best_lz_start = offset;
 			best_lz = length;
-			if (data->fast_lz) break;	/* Accept first LZ match */
+			if (data->options & O_FAST_LZ) break;	/* Accept first LZ match */
 			if (done) break;
 			if (length >= MAX_LZ_MATCH) break;
 		}
@@ -235,17 +344,22 @@ lz_linear_match:
 	while (scan < data->ipos) {
 		m1 = data->in + scan;
 		m2 = data->in + data->ipos;
-		if (scan >= data->ipos) goto end_lz_matches;
 		length = 0;
 
 		remain = (in_remain - length);
+		/* If we can't possibly hit the minimum match, give up immediately */
+		if (remain < MIN_LZ_MATCH) goto end_lz_matches;
+
+		/* Try to reject the match quickly */
+		if (*(m1 + MIN_LZ_MATCH - 1) != *(m2 + MIN_LZ_MATCH - 1)) goto end_lz_matches;
+
 		if (remain) {
 			while (*m1 == *m2) {
 /*			DLOG("LZ: m1 0x%lx == m2 0x%lx (remain %x)\n",
 					(long)((uintptr_t)m1 - (uintptr_t)(data->in)),
 					(long)((uintptr_t)m2 - (uintptr_t)(data->in)),
-					remain);
-*/				length++;
+					remain); */
+				length++;
 				m1++; m2++;
 				remain--;
 				if (!remain) {
@@ -266,7 +380,7 @@ end_lz_linear_match:
 			DLOG("LZ match: 0x%x : 0x%x (l)\n", scan, length);
 			best_lz_start = scan;
 			best_lz = length;
-			if (data->fast_lz) break;	/* Accept first LZ match */
+			if (data->options & O_FAST_LZ) break;	/* Accept first LZ match */
 			if (done) break;
 			if (length >= MAX_LZ_MATCH) break;
 		}
@@ -335,7 +449,7 @@ static int lzjb_find_seq(struct comp_data_t * const data)
 	seqcnt = 0;
 	num32 = *m32;
 	/* Loop bounds check compensates for bit width of data elements */
-	while (((data->ipos + (seqcnt << 2) + 3) < LZJB_BSIZE) && (*m32 == num32)) {
+	while (((data->ipos + (seqcnt << 2) + 3) < data->length) && (*m32 == num32)) {
 		seqcnt++;
 		num32++;
 		m32++;
@@ -356,7 +470,7 @@ static int lzjb_find_seq(struct comp_data_t * const data)
 	seqcnt = 0;
 	num16 = *m16;
 	/* Loop bounds check compensates for bit width of data elements */
-	while (((data->ipos + (seqcnt << 1) + 1) < LZJB_BSIZE) && (*m16 == num16)) {
+	while (((data->ipos + (seqcnt << 1) + 1) < data->length) && (*m16 == num16)) {
 		seqcnt++;
 		num16++;
 		m16++;
@@ -376,7 +490,7 @@ static int lzjb_find_seq(struct comp_data_t * const data)
 	/* 8-bit sequences */
 	seqcnt = 0;
 	num8 = *m8;
-	while (((data->ipos + seqcnt) < LZJB_BSIZE) && (*m8 == num8)) {
+	while (((data->ipos + seqcnt) < data->length) && (*m8 == num8)) {
 		seqcnt++;
 		num8++;
 		m8++;
@@ -402,25 +516,27 @@ static int lzjb_find_seq(struct comp_data_t * const data)
  * Returns the size of "out" data or returns -1 if the
  * compressed data is not smaller than the original data.
  */
-extern int lzjb_compress(const unsigned char * const blk_in,
+extern int lzjb_compress(unsigned char * const blk_in,
 		unsigned char * const blk_out,
 		const unsigned int options,
 		const unsigned int length)
 {
 	/* Initialize compression data structure */
-	struct comp_data_t comp_data = {
-		blk_in,		/* in */
-		blk_out,	/* out */
-		0,		/* ipos */
-		2,		/* opos */
-		0,		/* literals */
-		0,		/* literal_start */
-		length,		/* length */
-		(options & O_FAST_LZ)	/* stop at first match */
-	};
+	struct comp_data_t comp_data;
 	struct comp_data_t * const data = &comp_data;
 
 	DLOG("Comp: blk len 0x%x\n", length);
+
+	comp_data.in = blk_in;
+	comp_data.out = blk_out;
+	comp_data.ipos = 0;
+	comp_data.opos = 2;
+	comp_data.literals = 0;
+	comp_data.literal_start = 0;
+	comp_data.length = length;
+	comp_data.options = options;
+
+	if (options & O_NOPREFIX) comp_data.opos = 0;
 
 	if (length < MIN_LZ_MATCH) {
 		data->literals = length;
@@ -456,9 +572,11 @@ compress_short:
 	/* Flush any remaining literals */
 	lzjb_flush_literals(data);
 
-	/* Write the total length to the data block */
-	*(unsigned char *)(data->out) = (unsigned char)(data->opos - 2);
-	*(unsigned char *)(data->out + 1) = (unsigned char)(((data->opos - 2) & 0xff00) >> 8);
+	if (!(options & O_NOPREFIX)) {
+		/* Write the total length to the data block */
+		*(unsigned char *)(data->out) = (unsigned char)(data->opos - 2);
+		*(unsigned char *)(data->out + 1) = (unsigned char)(((data->opos - 2) & 0xff00) >> 8);
+	}
 
 	if (data->opos >= length) {
 		DLOG("warning: incompressible block\n"); }
@@ -494,6 +612,9 @@ extern int lzjb_decompress(const unsigned char * const in,
 	uint16_t num16;
 	uint8_t num8;
 	unsigned int seqbits = 0;
+	unsigned char *bp_out;
+	int bp_length;
+	unsigned char bp_temp[LZJB_BSIZE];
 
 	while (ipos < size) {
 		c = *(in + ipos);
@@ -506,10 +627,11 @@ extern int lzjb_decompress(const unsigned char * const in,
 			/* Change mode to the extended command instead */
 			mode = c & P_XMASK;
 			DLOG("X-mode: %x\n", mode);
-			/* Initializer for all sequence commands */
-			if (mode & P_SMASK) {
+			/* Initializer for sequence/bitplane commands */
+			if (mode & (P_SMASK | P_PLANE)) {
 				length = *(in + ipos);
-				DLOG("Seq length: %x\n", length);
+				if (mode & P_SMASK) DLOG("Seq length: %x\n", length);
+				if (mode & P_PLANE) DLOG("Bitplane length: %x\n", length);
 				ipos++;
 				/* Long form has a high byte */
 				if (!sl) {
@@ -520,6 +642,7 @@ extern int lzjb_decompress(const unsigned char * const in,
 						(uint16_t)*(in + ipos) << 8);
 					ipos++;
 				}
+				if (length > LZJB_BSIZE) goto error_length;
 			}
 		}
 		/* Handle short/long standard commands */
@@ -535,6 +658,22 @@ extern int lzjb_decompress(const unsigned char * const in,
 
 		/* Based on the command, select a decompressor */
 		switch (mode) {
+			case P_PLANE:
+				/* Bitplane transformation handler */
+				DLOG("%04x:%04x:  Bitplane c_len 0x%x\n", ipos, opos, length);
+				bp_out = out + opos;
+				bp_length = lzjb_decompress((in + ipos), bp_out, length);
+				bitplane_transform(bp_out, bp_temp, bp_length, -4);
+				DLOG("Bitplane transform len 0x%x done\n", bp_length);
+				ipos += length;
+				opos += bp_length;
+				length = 0;
+				/* memcpy sucks, we can do it ourselves */
+				while(length < bp_length) {
+					*(bp_out + length) = *(bp_temp + length);
+					length++;
+				}
+				break;
 			case P_LZ:
 				/* LZ (dictionary-based) compression */
 				offset = control & 0x0fff;
@@ -600,9 +739,7 @@ extern int lzjb_decompress(const unsigned char * const in,
 				if (opos > LZJB_BSIZE) goto error_seq;
 				DLOG("opos = 0x%x, length = 0x%x\n", opos, length);
 				while (length > 0) {
-					DLOG("1:%p\n", (void *)m32);
 					*m32 = num32;
-					DLOG("2\n");
 					m32++; num32++;
 					length--;
 				}
@@ -621,9 +758,7 @@ extern int lzjb_decompress(const unsigned char * const in,
 				opos += (length << 1);
 				if (opos > LZJB_BSIZE) goto error_seq;
 				while (length > 0) {
-					DLOG("1:%p,0x%x\n", (void *)m16, length);
 					*m16 = num16;
-					DLOG("2\n");
 					m16++; num16++;
 					length--;
 				}
@@ -652,12 +787,20 @@ extern int lzjb_decompress(const unsigned char * const in,
 				return -1;
 		}
 	}
+
 	return opos;
+/*oom:
+	fprintf(stderr, "liblzjb: out of memory\n");
+	exit(EXIT_FAILURE); */
 error_lz_offset:
 	fprintf(stderr, "liblzjb: data error: LZ offset 0x%x >= output pos 0x%x)\n", offset, opos);
 	exit(EXIT_FAILURE);
 error_seq:
 	fprintf(stderr, "liblzjb: data error: seq%d overflow (length 0x%x)\n", seqbits, length);
+	exit(EXIT_FAILURE);
+error_length:
+	fprintf(stderr, "liblzjb: data error: length 0x%x greater than maximum 0x%x @ 0x%x\n",
+			length, LZJB_BSIZE, ipos - 1);
 	exit(EXIT_FAILURE);
 }
 

@@ -24,7 +24,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <lzjb.h>
+#include "lzjb.h"
 #include "lzjb_util.h"
 
 #ifdef THREADED
@@ -40,7 +40,7 @@ struct files_t * const files = &file_vars;
 static void *compress_thread(void *arg)
 {
 	struct thread_info * const thr = arg;
-	const unsigned char *ipos = thr->blk;	/* Uncompressed input pointer */
+	unsigned char *ipos = thr->blk;	/* Uncompressed input pointer */
 	unsigned char *opos = thr->out;	/* Compressed output pointer */
 	int i;
 	int bsize = LZJB_BSIZE;	/* Compressor block size */
@@ -94,6 +94,7 @@ int main(int argc, char **argv)
 		if (!out) goto oom;
 		while((length = fread(blk, 1, LZJB_BSIZE, files->in))) {
 			if (ferror(files->in)) goto error_read;
+			DLOG("--- Compressing block %d\n", blocknum);
 			i = lzjb_compress(blk, out, options, length);
 			DLOG("c_size %d bytes\n", i);
 			i = fwrite(out, i, 1, files->out);
@@ -109,7 +110,8 @@ int main(int argc, char **argv)
 			nprocs = 1;
 		}
  #endif /* _SC_NPROCESSORS_ONLN */
-		nprocs <<= 2;
+		/* Run two threads per processor */
+		nprocs <<= 1;
 		fprintf(stderr, "lzjb: compressing with %d worker threads\n", nprocs);
 
 		/* Allocate per-thread input/output memory and control blocks */
@@ -217,6 +219,7 @@ int main(int argc, char **argv)
 			if (ferror(files->in)) goto error_read;
 			if (i != length) goto error_shortread;
 
+			DLOG("--- Dempressing block %d\n", blocknum);
 			length = lzjb_decompress(blk, out, i);
 			if (length < 0) goto error_decompress;
 			if (length > LZJB_BSIZE) goto error_blocksize_decomp;

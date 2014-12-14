@@ -69,6 +69,7 @@
 #define MIN_SEQ32_LENGTH 9
 #define MIN_SEQ16_LENGTH 7
 #define MIN_SEQ8_LENGTH 6
+#define MIN_PLANE_LENGTH 8
 
 /* If a byte occurs more times than this in a block, use linear scanning */
 #ifndef MAX_LZ_BYTE_SCANS
@@ -76,23 +77,25 @@
 #endif
 
 /* Options for the compressor */
-#define O_FAST_LZ 0x01
+#define O_FAST_LZ 0x01	/* Stop at first LZ match */
+#define O_NOPREFIX 0x40	/* Don't prefix lzjb_compress data with the compressed length */
+#define O_REALFLUSH 0x80	/* Make lzjb_flush_literals flush without question */
 
 struct comp_data_t {
-	const unsigned char * const in;
-	unsigned char * const out;
+	unsigned char *in;
+	unsigned char *out;
 	unsigned int ipos;
 	unsigned int opos;
 	unsigned int literals;
 	unsigned int literal_start;
 	unsigned int length;	/* Length of input data */
-	int fast_lz;	/* 0=exhaustive search, 1=stop at first match */
+	int options;	/* 0=exhaustive search, 1=stop at first match */
 	uint16_t byte[256][MAX_LZ_BYTE_SCANS];	/* Lists of locations of each byte value */
 	uint16_t bytecnt[256];	/* How many offsets exist per byte */
 };
 
 
-extern int lzjb_compress(const unsigned char * const, unsigned char * const,
+extern int lzjb_compress(unsigned char * const, unsigned char * const,
 		const unsigned int, const unsigned int);
 extern int lzjb_decompress(const unsigned char * const in,
 		unsigned char * const out, const unsigned int size);

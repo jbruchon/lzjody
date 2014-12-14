@@ -22,6 +22,10 @@ LDFLAGS += -lpthread
 BUILD_CFLAGS += -DTHREADED
 endif
 
+ifdef DEBUG
+BUILD_CFLAGS += -DDEBUG -g
+endif
+
 all: lzjb lzjb.static test
 
 lzjb.static: liblzjb.a lzjb_util.o
@@ -30,11 +34,11 @@ lzjb.static: liblzjb.a lzjb_util.o
 lzjb: liblzjb.so lzjb_util.o
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(BUILD_CFLAGS) -llzjb -o lzjb lzjb_util.o
 
-liblzjb.so:
+liblzjb.so: lzjb.c
 	$(CC) -c $(BUILD_CFLAGS) -fPIC $(CFLAGS) lzjb.c
 	$(CC) -shared -o liblzjb.so lzjb.o
 
-liblzjb.a:
+liblzjb.a: lzjb.c
 	$(CC) -c $(BUILD_CFLAGS) $(CFLAGS) lzjb.c
 	$(AR) rcs liblzjb.a lzjb.o
 
