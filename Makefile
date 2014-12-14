@@ -16,7 +16,10 @@ datarootdir=${prefix}/share
 datadir=${datarootdir}
 sysconfdir=${prefix}/etc
 
-all: lzjb lzjb.static test
+all: lzjb lzjb.static lzjb_parallel.static test
+
+lzjb_parallel.static: liblzjb.a lzjb_util.o lzjb_parallel.o
+	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(BUILD_CFLAGS) -lpthread -o lzjb_parallel.static lzjb_parallel.o liblzjb.a
 
 lzjb.static: liblzjb.a lzjb_util.o
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(BUILD_CFLAGS) -o lzjb.static lzjb_util.o liblzjb.a
@@ -39,10 +42,10 @@ liblzjb.a: lzjb.o
 	$(CC) -c $(BUILD_CFLAGS) $(CFLAGS) $<
 
 clean:
-	rm -f *.o *.a *~ .*un~ lzjb lzjb.static *.so* debug.log *.?.gz log.test.* out.*
+	rm -f *.o *.a *~ .*un~ lzjb lzjb*.static *.so* debug.log *.?.gz log.test.* out.*
 
 distclean:
-	rm -f *.o *.a *~ .*un~ lzjb lzjb.static *.so* debug.log *.?.gz log.test.* out.* *.pkg.tar.*
+	rm -f *.o *.a *~ .*un~ lzjb lzjb*.static *.so* debug.log *.?.gz log.test.* out.* *.pkg.tar.*
 
 install: all
 	install -D -o root -g root -m 0755 lzjb $(bindir)/lzjb
