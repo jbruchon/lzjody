@@ -29,14 +29,14 @@ static int lzjb_find_lz(struct comp_data_t * const data);
 static int lzjb_find_rle(struct comp_data_t * const data);
 static int lzjb_find_seq(struct comp_data_t * const data);
 
-/* Perform a bit plane transformation on some data
+/* Perform a byte plane transformation on some data
  * For example, a 4-plane transform on "1200120112021023" would change
- * that string into "1111222200000123", a string which is actually
+ * that string into "1111222200000123", a string which is easily
  * compressible, unlike the original. The resulting string has three
  * RLE runs and one incremental sequence.
  * Passing a negative num_planes reverses the transformation.
  */
-static void bitplane_transform(const unsigned char * const in,
+static void byteplane_transform(const unsigned char * const in,
 		unsigned char * const out, int length,
 		char num_planes)
 {
@@ -45,7 +45,7 @@ static void bitplane_transform(const unsigned char * const in,
 	int opos = 0;
 
 	if (num_planes > 1) {
-		/* Split 'in' to bitplanes, placing result in 'out' */
+		/* Split 'in' to byteplanes, placing result in 'out' */
 		while (plane < num_planes) {
 			i = plane;
 			while (i < length) {
@@ -73,10 +73,10 @@ static void bitplane_transform(const unsigned char * const in,
 	return;
 
 error_planes:
-	fprintf(stderr, "liblzjb: bitplane_transform passed invalid plane count %d\n", num_planes);
+	fprintf(stderr, "liblzjb: byteplane_transform passed invalid plane count %d\n", num_planes);
 	exit(EXIT_FAILURE);
 error_length:
-	fprintf(stderr, "liblzjb: internal error: bitplane_transform opos 0x%x != length 0x%x\n", opos, length);
+	fprintf(stderr, "liblzjb: internal error: byteplane_transform opos 0x%x != length 0x%x\n", opos, length);
 	exit(EXIT_FAILURE);
 }
 
@@ -180,7 +180,7 @@ static void lzjb_really_flush_literals(struct comp_data_t * const data)
 	data->literals = 0;
 }
 
-/* Intercept a stream of literals and try bit plane transformation */
+/* Intercept a stream of literals and try byte plane transformation */
 static void lzjb_flush_literals(struct comp_data_t * const data)
 {
 	unsigned char lit_in[LZJB_BSIZE + 4];
@@ -217,7 +217,7 @@ static void lzjb_flush_literals(struct comp_data_t * const data)
 	/* Try to compress a literal run further */
 	DLOG("compress further: 0x%x @ 0x%x\n", data->literals, data->literal_start);
 	/* Make a transformed copy of the data */
-	bitplane_transform((data->in + data->literal_start),
+	byteplane_transform((data->in + data->literal_start),
 			lit_in, data->literals, 4);
 
 	/* Try to compress the data again */
@@ -574,8 +574,8 @@ compress_short:
 
 	if (!(options & O_NOPREFIX)) {
 		/* Write the total length to the data block */
-		*(unsigned char *)(data->out) = (unsigned char)(data->opos - 2);
-		*(unsigned char *)(data->out + 1) = (unsigned char)(((data->opos - 2) & 0xff00) >> 8);
+		*(unsigned char *)(data->out) = (unsigned char)(((data->opos - 2) & 0xff00) >> 8);
+		*(unsigned char *)(data->out + 1) = (unsigned char)(data->opos - 2);
 	}
 
 	if (data->opos >= length) {
@@ -627,11 +627,11 @@ extern int lzjb_decompress(const unsigned char * const in,
 			/* Change mode to the extended command instead */
 			mode = c & P_XMASK;
 			DLOG("X-mode: %x\n", mode);
-			/* Initializer for sequence/bitplane commands */
+			/* Initializer for sequence/byteplane commands */
 			if (mode & (P_SMASK | P_PLANE)) {
 				length = *(in + ipos);
 				if (mode & P_SMASK) DLOG("Seq length: %x\n", length);
-				if (mode & P_PLANE) DLOG("Bitplane length: %x\n", length);
+				if (mode & P_PLANE) DLOG("Byte plane length: %x\n", length);
 				ipos++;
 				/* Long form has a high byte */
 				if (!sl) {
@@ -659,12 +659,12 @@ extern int lzjb_decompress(const unsigned char * const in,
 		/* Based on the command, select a decompressor */
 		switch (mode) {
 			case P_PLANE:
-				/* Bitplane transformation handler */
-				DLOG("%04x:%04x:  Bitplane c_len 0x%x\n", ipos, opos, length);
+				/* Byte plane transformation handler */
+				DLOG("%04x:%04x:  Byte plane c_len 0x%x\n", ipos, opos, length);
 				bp_out = out + opos;
 				bp_length = lzjb_decompress((in + ipos), bp_out, length);
-				bitplane_transform(bp_out, bp_temp, bp_length, -4);
-				DLOG("Bitplane transform len 0x%x done\n", bp_length);
+				byteplane_transform(bp_out, bp_temp, bp_length, -4);
+				DLOG("Byte plane transform len 0x%x done\n", bp_length);
 				ipos += length;
 				opos += bp_length;
 				length = 0;

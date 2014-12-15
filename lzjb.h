@@ -43,7 +43,7 @@
 #define P_LIT	0x20	/* Literal values */
 #define P_LZL	0x10	/* LZ match flag: size > 255 */
 #define P_EXT	0x00	/* Extended algorithms (ignore 0x10 and P_SHORT) */
-#define P_PLANE 0x04	/* Bit-plane transform */
+#define P_PLANE 0x04	/* Byte plane transform */
 #define P_SEQ32	0x03	/* Sequential 32-bit values */
 #define P_SEQ16	0x02	/* Sequential 16-bit values */
 #define P_SEQ8	0x01	/* Sequential 8-bit values */

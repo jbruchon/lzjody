@@ -211,8 +211,8 @@ int main(int argc, char **argv)
 		if (!out) goto oom;
 		while(fread(blk, 1, 2, files->in)) {
 			/* Read the length of the compressed data */
-			length = *blk;
-			length |= (*(blk + 1) << 8);
+			length = *(blk + 1);
+			length |= (*blk << 8);
 			if (length > (LZJB_BSIZE + 8)) goto error_blocksize_d_prefix;
 
 			i = fread(blk, 1, length, files->in);
