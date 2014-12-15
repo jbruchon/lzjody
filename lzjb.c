@@ -207,7 +207,7 @@ static void lzjb_flush_literals(struct comp_data_t * const data)
 	DLOG("flush_literals: 0x%x\n", data->literals);
 
 	/* Handle blocking of recursive calls or very short literal runs */
-	if ((data->literals < MIN_RLE_LENGTH + MIN_PLANE_LENGTH)
+	if ((data->literals < MIN_PLANE_LENGTH)
 			|| (data->options & O_REALFLUSH)) {
 		DLOG("bypass further compression\n");
 		lzjb_really_flush_literals(data);
@@ -392,11 +392,13 @@ end_lz_matches:
 	if (best_lz) {
 		lzjb_flush_literals(data);
 		if (best_lz < 256) lzjb_write_control(data, P_LZ, best_lz_start);
-		else lzjb_write_control(data, (P_LZ | P_LZL), best_lz_start);
-		/* Write LZ match length */
-		*(data->out + data->opos) = best_lz;
-		data->opos++;
-		*(data->out + data->opos) = best_lz >> 8;
+		else {
+			lzjb_write_control(data, (P_LZ | P_LZL), best_lz_start);
+			*(data->out + data->opos) = best_lz >> 8;
+			data->opos++;
+		}
+		/* Write LZ match length low byte */
+		*(data->out + data->opos) = (unsigned char)(best_lz & 0xff);
 		data->opos++;
 		/* Skip matched input */
 		data->ipos += best_lz;
@@ -648,11 +650,13 @@ extern int lzjb_decompress(const unsigned char * const in,
 		/* Handle short/long standard commands */
 		else if (sl) {
 			control = c & P_SHORT_MAX;
+			DLOG("Short control: 0x%x\n", control);
 		} else {
 			if (c & (P_RLE | P_LZL)) 
 				control = (unsigned int)(c & (P_LZL | P_SHORT_MAX)) << 8;
 			else control = (unsigned int)(c & P_SHORT_MAX) << 8;
 			control += *(in + ipos);
+			DLOG("Long control: 0x%x\n", control);
 			ipos++;
 		}
 
@@ -676,11 +680,14 @@ extern int lzjb_decompress(const unsigned char * const in,
 				break;
 			case P_LZ:
 				/* LZ (dictionary-based) compression */
-				offset = control & 0x0fff;
+				offset = control & 0xfff;
 				length = *(in + ipos);
 				ipos++;
-				if (c & P_LZL) length += ((unsigned int)*(in + ipos) << 8);
-				ipos++;
+				if (c & P_LZL) {
+					length <<= 8;
+					length += *(in + ipos);
+					ipos++;
+				}
 				DLOG("%04x:%04x: LZ block (%x:%x)\n",
 						ipos, opos, offset, length);
 				/* memcpy/memmove do not handle the overlap

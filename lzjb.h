@@ -63,11 +63,12 @@
  * This avoids data expansion cause by interrupting a stream
  * of literals (which triggers up to 2 more control bytes)
  */
-#define MIN_LZ_MATCH 4
+#define MIN_LZ_MATCH 3
 #define MAX_LZ_MATCH 4095
 #define MIN_RLE_LENGTH 3
-#define MIN_SEQ32_LENGTH 8
-#define MIN_SEQ16_LENGTH 4
+/* Sequence lengths are not byte counts, they are word counts! */
+#define MIN_SEQ32_LENGTH 2
+#define MIN_SEQ16_LENGTH 2
 #define MIN_SEQ8_LENGTH 3
 #define MIN_PLANE_LENGTH 8
 
