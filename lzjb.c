@@ -297,7 +297,7 @@ static int lzjb_find_lz(struct comp_data_t * const data)
 
 		remain = data->length - data->ipos;
 		/* If we can't possibly hit the minimum match, give up immediately */
-		if (remain < MIN_LZ_MATCH) goto end_lz_matches;
+		if (remain < MIN_LZ_MATCH) goto end_lz_jump_match;
 
 		m2 = data->in + offset;
 /*		DLOG("LZ: offset 0x%x, remain 0x%x, scan 0x%x, total_scans 0x%x\n",
@@ -348,7 +348,7 @@ lz_linear_match:
 
 		remain = (in_remain - length);
 		/* If we can't possibly hit the minimum match, give up immediately */
-		if (remain < MIN_LZ_MATCH) goto end_lz_matches;
+		if (remain < MIN_LZ_MATCH) goto end_lz_linear_match;
 
 		/* Try to reject the match quickly */
 		if (*(m1 + MIN_LZ_MATCH - 1) != *(m2 + MIN_LZ_MATCH - 1)) goto end_lz_matches;

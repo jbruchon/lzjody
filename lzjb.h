@@ -63,12 +63,12 @@
  * This avoids data expansion cause by interrupting a stream
  * of literals (which triggers up to 2 more control bytes)
  */
-#define MIN_LZ_MATCH 6
+#define MIN_LZ_MATCH 4
 #define MAX_LZ_MATCH 4095
-#define MIN_RLE_LENGTH 5
-#define MIN_SEQ32_LENGTH 9
-#define MIN_SEQ16_LENGTH 7
-#define MIN_SEQ8_LENGTH 6
+#define MIN_RLE_LENGTH 3
+#define MIN_SEQ32_LENGTH 8
+#define MIN_SEQ16_LENGTH 4
+#define MIN_SEQ8_LENGTH 3
 #define MIN_PLANE_LENGTH 8
 
 /* If a byte occurs more times than this in a block, use linear scanning */
