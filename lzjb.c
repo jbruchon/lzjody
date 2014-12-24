@@ -296,6 +296,8 @@ static int lzjb_find_lz(struct comp_data_t * const data)
 		}
 
 		remain = data->length - data->ipos;
+		DLOG("LZ remain 0x%x at offset 0x%x ipos 0x%x\n", remain, offset, data->ipos);
+
 		/* If we can't possibly hit the minimum match, give up immediately */
 		if (remain < MIN_LZ_MATCH) goto end_lz_jump_match;
 
@@ -540,7 +542,8 @@ extern int lzjb_compress(unsigned char * const blk_in,
 
 	if (options & O_NOPREFIX) comp_data.opos = 0;
 
-	if (length < MIN_LZ_MATCH) {
+	/* Nothing under 3 bytes long will compress */
+	if (length < 3) {
 		data->literals = length;
 		goto compress_short;
 	}
@@ -559,8 +562,8 @@ extern int lzjb_compress(unsigned char * const blk_in,
 		 */
 		DLOG("ipos: 0x%x\n", data->ipos);
 		if (!lzjb_find_rle(data)) {
-		if (!lzjb_find_lz(data))  {
 		if (!lzjb_find_seq(data)) {
+		if (!lzjb_find_lz(data))  {
 			if (data->literals == 0)
 				data->literal_start = data->ipos;
 			data->literals++;
