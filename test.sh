@@ -15,8 +15,8 @@ if [ $CFAIL -eq 0 ]
 	then $LZJB -d < $COMP > $OUT 2>log.test.decompress || DFAIL=1
 fi
 
-test $CFAIL -eq 1 && echo -e "\nCompressor test FAILED. Decompressor test not performed.\n"
-test $DFAIL -eq 1 && echo -e "\nDecompressor test FAILED.\n"
+test $CFAIL -eq 1 && echo -e "\nCompressor test FAILED. Decompressor test not performed.\n" && exit 1
+test $DFAIL -eq 1 && echo -e "\nDecompressor test FAILED.\n" && exit 1
 test $CFAIL -eq 0 && test $DFAIL -eq 0 && echo -e "\nCompressor/decompressor tests PASSED.\n"
 
 sha1sum $IN $OUT
