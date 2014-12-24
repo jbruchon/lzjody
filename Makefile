@@ -35,8 +35,8 @@ lzjb: liblzjb.so lzjb_util.o
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(BUILD_CFLAGS) -llzjb -o lzjb lzjb_util.o
 
 liblzjb.so: lzjb.c
-	$(CC) -c $(BUILD_CFLAGS) -fPIC $(CFLAGS) lzjb.c
-	$(CC) -shared -o liblzjb.so lzjb.o
+	$(CC) -c $(BUILD_CFLAGS) -fPIC $(CFLAGS) -o lzjb_shared.o lzjb.c
+	$(CC) -shared -o liblzjb.so lzjb_shared.o
 
 liblzjb.a: lzjb.c
 	$(CC) -c $(BUILD_CFLAGS) $(CFLAGS) lzjb.c
