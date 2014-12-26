@@ -40,7 +40,10 @@ You can also use DEBUG=1 to turn on some very annoying debugging messages.
 The LZJB library accepts blocks for compression up to 4096 bytes in size and
 is designed to guarantee no more than four bytes of data expansion for a
 block that is 100% incompressible. The compress/decompress functions return
-the number of bytes that are output by the function.
+the number of bytes that are output by the function. This return value can
+be examined by the calling application and used to determine if it will be
+better to store the data uncompressed with an "out-of-band" indicator that
+the block is stored raw instead of in the LZJB compressed format.
 
 
 COMPRESSED DATA FORMAT
