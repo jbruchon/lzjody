@@ -58,18 +58,22 @@
 #define P_SHORT_XMAX 0xff
 
 /* Minimum sizes for compression
- * These sizes are calculated as follows:
- * control byte(s) + data byte(s) + 2 next control byte(s)
- * This avoids data expansion cause by interrupting a stream
- * of literals (which triggers up to 2 more control bytes)
+ * These sizes are roughly calculated as follows:
+ * control byte(s) + data byte(s) + other control byte(s)
+ * This avoids data expansion cause by interrupting a stream of literals
+ * (which triggers up to 2 more control bytes). Algorithms adjust these if
+ * the literal count to flush is going to trigger an additional control byte.
+ *
+ * WARNING: Changing these values too low will cause the compression
+ * algorithms to expand data and fail in some cases!
  */
 #define MIN_LZ_MATCH 3
 #define MAX_LZ_MATCH 4095
 #define MIN_RLE_LENGTH 3
 /* Sequence lengths are not byte counts, they are word counts! */
 #define MIN_SEQ32_LENGTH 2
-#define MIN_SEQ16_LENGTH 2
-#define MIN_SEQ8_LENGTH 3
+#define MIN_SEQ16_LENGTH 3
+#define MIN_SEQ8_LENGTH 4
 #define MIN_PLANE_LENGTH 8
 
 /* If a byte occurs more times than this in a block, use linear scanning */
@@ -78,12 +82,15 @@
 #endif
 
 /* Options for the compressor */
-#define O_FAST_LZ 0x01	/* Stop at first LZ match */
-#define O_NOPREFIX 0x40	/* Don't prefix lzjb_compress data with the compressed length */
-#define O_REALFLUSH 0x80	/* Make lzjb_flush_literals flush without question */
+#define O_FAST_LZ 0x01	/* Stop at first LZ match (faster but not recommended) */
+#define O_NOPREFIX 0x40	/* Don't prefix lzjb_compress() data with the compressed length */
+#define O_REALFLUSH 0x80	/* Make lzjb_flush_literals() flush without question */
+
+/* Decompressor options (some copied from data block header) */
+#define O_NOCOMPRESS 0x80	/* Incompressible block packing flag */
 
 struct comp_data_t {
-	unsigned char *in;
+	const unsigned char *in;
 	unsigned char *out;
 	unsigned int ipos;
 	unsigned int opos;
@@ -96,10 +103,10 @@ struct comp_data_t {
 };
 
 
-extern int lzjb_compress(unsigned char * const, unsigned char * const,
+extern int lzjb_compress(const unsigned char * const, unsigned char * const,
 		const unsigned int, const unsigned int);
-extern int lzjb_decompress(const unsigned char * const in,
-		unsigned char * const out, const unsigned int size);
+extern int lzjb_decompress(const unsigned char * const, unsigned char * const,
+		const unsigned int, const unsigned int);
 
 #endif	/* _LZJB_H */
 

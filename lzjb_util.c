@@ -210,6 +210,9 @@ int main(int argc, char **argv)
 		out = (unsigned char *)malloc(LZJB_BSIZE);
 		if (!out) goto oom;
 		while(fread(blk, 1, 2, files->in)) {
+			/* Get block-level decompression options */
+			options = *blk & 0xf0;
+
 			/* Read the length of the compressed data */
 			length = *(blk + 1);
 			length |= (*blk << 8);
@@ -220,7 +223,7 @@ int main(int argc, char **argv)
 			if (i != length) goto error_shortread;
 
 			DLOG("--- Dempressing block %d\n", blocknum);
-			length = lzjb_decompress(blk, out, i);
+			length = lzjb_decompress(blk, out, i, options);
 			if (length < 0) goto error_decompress;
 			if (length > LZJB_BSIZE) goto error_blocksize_decomp;
 
