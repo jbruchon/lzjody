@@ -616,13 +616,15 @@ extern int lzjb_compress(const unsigned char * const blk_in,
 
 	if (options & O_NOPREFIX) comp_data.opos = 0;
 
+	/* Perform sanity checks on data length */
+	if (length == 0) goto error_zero_length;
+	if (length > LZJB_BSIZE) goto error_large_length;
+
 	/* Nothing under 3 bytes long will compress */
 	if (length < 3) {
 		data->literals = length;
 		goto compress_short;
 	}
-
-	if (length > LZJB_BSIZE) goto error_length;
 
 	/* Load arrays for match speedup */
 	err = index_bytes(data);
@@ -646,9 +648,12 @@ compress_short:
 	DLOG("compressed length: %x\n", data->opos);
 	return data->opos;
 
-error_length:
+error_large_length:
 	fprintf(stderr, "liblzjb: error: block length %d larger than maximum of %d\n",
 			length, LZJB_BSIZE);
+	return -1;
+error_zero_length:
+	fprintf(stderr, "liblzjb: error: cannot compress a zero-length block\n");
 	return -1;
 }
 
@@ -681,6 +686,9 @@ extern int lzjb_decompress(const unsigned char * const in,
 	int bp_length;
 	unsigned char bp_temp[LZJB_BSIZE];
 	int err;
+
+	/* Cannot decompress a zero-length block */
+	if (size == 0) return -1;
 
 	while (ipos < size) {
 		c = *(in + ipos);
