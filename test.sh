@@ -17,6 +17,10 @@ fi
 
 test $CFAIL -eq 1 && echo -e "\nCompressor test FAILED. Decompressor test not performed.\n" && exit 1
 test $DFAIL -eq 1 && echo -e "\nDecompressor test FAILED.\n" && exit 1
-test $CFAIL -eq 0 && test $DFAIL -eq 0 && echo -e "\nCompressor/decompressor tests PASSED.\n"
 
-sha1sum $IN $OUT
+# Check hashes
+S1="$(sha1sum $IN | cut -d' ' -f1)"
+S2="$(sha1sum $OUT | cut -d' ' -f1)"
+test "$S1" != "$S2" && echo -e "\nCompressor/decompressor tests FAILED: mismatched hashes\n" && exit 1
+
+echo -e "\nCompressor/decompressor tests PASSED.\n"
