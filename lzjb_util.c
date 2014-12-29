@@ -31,6 +31,7 @@
 #include <pthread.h>
 pthread_mutex_t mtx = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t cond;	/* pthreads change condition */
+int thread_error;	/* nonzero if any thread fails */
 #endif
 
 struct files_t file_vars;
@@ -49,6 +50,10 @@ static void *compress_thread(void *arg)
 	while (remain) {
 		if (remain < LZJB_BSIZE) bsize = remain;
 		i = lzjb_compress(ipos, opos, thr->options, bsize);
+		if (i < 0) {
+			thread_error = 1;
+			pthread_cond_signal(&cond);
+		}
 		ipos += bsize;
 		opos += i;
 		remain -= bsize;
@@ -96,6 +101,7 @@ int main(int argc, char **argv)
 			if (ferror(files->in)) goto error_read;
 			DLOG("--- Compressing block %d\n", blocknum);
 			i = lzjb_compress(blk, out, options, length);
+			if (i < 0) goto error_compression;
 			DLOG("c_size %d bytes\n", i);
 			i = fwrite(out, i, 1, files->out);
 			if (!i) goto error_write;
@@ -121,6 +127,7 @@ int main(int argc, char **argv)
 		/* Set compressor options */
 		for (i = 0; i < nprocs; i++) (thr + i)->options = options;
 
+		thread_error = 0;
 		while (1) {
 			/* See if lowest block number is finished */
 			while (1) {
@@ -129,6 +136,7 @@ int main(int argc, char **argv)
 				/* Scan threads for smallest block number */
 				pthread_mutex_lock(&mtx);
 				for (thread = 0; thread < nprocs; thread++) {
+					if (thread_error != 0) goto error_compression;
 					i = (thr + thread)->block;
 					if (i > 0 && i < min_blk) {
 						min_blk = i;
@@ -237,29 +245,32 @@ int main(int argc, char **argv)
 
 	exit(EXIT_SUCCESS);
 
+error_compression:
+	fprintf(stderr, "Fatal error during compression, aborting.\n");
+	exit(EXIT_FAILURE);
 error_read:
-	fprintf(stderr, "error reading file %s\n", "stdin");
+	fprintf(stderr, "Error reading file %s\n", "stdin");
 	exit(EXIT_FAILURE);
 error_write:
-	fprintf(stderr, "error writing file %s (%d of %d written)\n", "stdout",
+	fprintf(stderr, "Error writing file %s (%d of %d written)\n", "stdout",
 			i, length);
 	exit(EXIT_FAILURE);
 error_shortread:
-	fprintf(stderr, "error: short read: %d < %d\n", i, length);
+	fprintf(stderr, "Error: short read: %d < %d\n", i, length);
 	exit(EXIT_FAILURE);
 error_blocksize_d_prefix:
-	fprintf(stderr, "error: decompressor prefix too large (%d > %d) \n",
+	fprintf(stderr, "Error: decompressor prefix too large (%d > %d) \n",
 			length, (LZJB_BSIZE + 8));
 	exit(EXIT_FAILURE);
 error_blocksize_decomp:
-	fprintf(stderr, "error: decompressor overflow (%d > %d) \n",
+	fprintf(stderr, "Error: decompressor overflow (%d > %d) \n",
 			length, LZJB_BSIZE);
 	exit(EXIT_FAILURE);
 error_decompress:
-	fprintf(stderr, "error: cannot decompress block %d\n", blocknum);
+	fprintf(stderr, "Error: cannot decompress block %d\n", blocknum);
 	exit(EXIT_FAILURE);
 oom:
-	fprintf(stderr, "error: out of memory\n");
+	fprintf(stderr, "Error: out of memory\n");
 	exit(EXIT_FAILURE);
 usage:
 	fprintf(stderr, "lzjb %s, a compression utility by Jody Bruchon (%s)\n",
