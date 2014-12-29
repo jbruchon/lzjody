@@ -36,7 +36,7 @@ static int lzjb_find_seq(struct comp_data_t * const data);
  * RLE runs and one incremental sequence.
  * Passing a negative num_planes reverses the transformation.
  */
-static void byteplane_transform(const unsigned char * const in,
+static int byteplane_transform(const unsigned char * const in,
 		unsigned char * const out, int length,
 		char num_planes)
 {
@@ -70,7 +70,7 @@ static void byteplane_transform(const unsigned char * const in,
 
 	}
 	if (opos != length) goto error_length;
-	return;
+	return 0;
 
 error_planes:
 	fprintf(stderr, "liblzjb: byteplane_transform passed invalid plane count %d\n", num_planes);
@@ -81,7 +81,7 @@ error_length:
 }
 
 /* Build an array of byte values for faster LZ matching */
-static void index_bytes(struct comp_data_t * const data)
+static int index_bytes(struct comp_data_t * const data)
 {
 	unsigned int pos = 0;
 	const unsigned char *mem = data->in;
@@ -103,7 +103,8 @@ static void index_bytes(struct comp_data_t * const data)
 		pos++;
 		if (data->bytecnt[c] == MAX_LZ_BYTE_SCANS) break;
 	}
-	return;
+	return 0;
+
 error_index:
 	fprintf(stderr, "liblzjb: internal error: index_bytes data block length too short\n");
 	exit(EXIT_FAILURE);
@@ -111,7 +112,7 @@ error_index:
 
 /* Write the control byte(s) that define data
  * type is the P_xxx value that determines the type of the control byte */
-static void lzjb_write_control(struct comp_data_t * const data,
+static int lzjb_write_control(struct comp_data_t * const data,
 		const unsigned char type,
 		const uint16_t value)
 {
@@ -140,7 +141,7 @@ static void lzjb_write_control(struct comp_data_t * const data,
 			data->opos++;
 			DLOG("v 0x%x\n", (uint8_t)value);
 		}
-		return;
+		return 0;
 	}
 	/* Standard control bytes */
 	else if (value > P_SHORT_MAX) {
@@ -156,18 +157,19 @@ static void lzjb_write_control(struct comp_data_t * const data,
 		data->opos++;
 		DLOG("t+v 0x%x\n", data->opos - 1);
 	}
-	return;
+	return 0;
+
 error_value_too_large:
 	fprintf(stderr, "error: lzjb_write_control: value 0x%x > 0x1000\n", value);
 	exit(EXIT_FAILURE);
 }
 
 /* Write out all pending literals without further processing */
-static void lzjb_really_flush_literals(struct comp_data_t * const data)
+static int lzjb_really_flush_literals(struct comp_data_t * const data)
 {
 	unsigned int i = 0;
 
-	if (data->literals == 0) return;
+	if (data->literals == 0) return 0;
 	DLOG("really_flush_literals: 0x%x (opos 0x%x)\n", data->literals, data->opos);
 	if ((data->opos + data->literals) > (LZJB_BSIZE + 4)) goto error_opos;
 	/* First write the control byte... */
@@ -181,7 +183,8 @@ static void lzjb_really_flush_literals(struct comp_data_t * const data)
 	/* Reset literal counter*/
 	DLOG("flushed; new opos: 0x%x\n", data->opos);
 	data->literals = 0;
-	return;
+	return 0;
+
 error_opos:
 	fprintf(stderr, "error: final output position will overflow: 0x%x > 0x%x\n",
 			data->opos + data->literals, LZJB_BSIZE + 4);
@@ -189,7 +192,7 @@ error_opos:
 }
 
 /* Intercept a stream of literals and try byte plane transformation */
-static void lzjb_flush_literals(struct comp_data_t * const data)
+static int lzjb_flush_literals(struct comp_data_t * const data)
 {
 	unsigned char lit_in[LZJB_BSIZE + 4];
 	unsigned char lit_out[LZJB_BSIZE + 4];
@@ -200,7 +203,7 @@ static void lzjb_flush_literals(struct comp_data_t * const data)
 	struct comp_data_t * const data2 = &d2;
 
 	/* For zero literals we'll just do nothing. */
-	if (data->literals == 0) return;
+	if (data->literals == 0) return 0;
 
 	d2.in = lit_in;
 	d2.out = lit_out;
@@ -219,7 +222,7 @@ static void lzjb_flush_literals(struct comp_data_t * const data)
 			|| (data->options & O_REALFLUSH)) {
 		DLOG("bypass further compression\n");
 		lzjb_really_flush_literals(data);
-		return;
+		return 0;
 	}
 
 	/* Try to compress a literal run further */
@@ -250,7 +253,7 @@ static void lzjb_flush_literals(struct comp_data_t * const data)
 				data2->opos,
 				data2->length);
 		lzjb_really_flush_literals(data);
-		return;
+		return 0;
 	}
 
 	/* Dump the newly compressed data as a literal stream */
@@ -263,7 +266,7 @@ static void lzjb_flush_literals(struct comp_data_t * const data)
 	}
 	/* Reset literal counter*/
 	data->literals = 0;
-	return;
+	return 0;
 }
 
 /* Find best LZ data match for current input position */
@@ -614,6 +617,7 @@ compress_short:
 
 	DLOG("compressed length: %x\n", data->opos);
 	return data->opos;
+
 error_length:
 	fprintf(stderr, "liblzjb: error: block length %d larger than maximum of %d\n",
 			length, LZJB_BSIZE);
@@ -827,9 +831,7 @@ extern int lzjb_decompress(const unsigned char * const in,
 	}
 
 	return opos;
-/*oom:
-	fprintf(stderr, "liblzjb: out of memory\n");
-	exit(EXIT_FAILURE); */
+
 error_lz_offset:
 	fprintf(stderr, "liblzjb: data error: LZ offset 0x%x >= output pos 0x%x)\n", offset, opos);
 	exit(EXIT_FAILURE);
