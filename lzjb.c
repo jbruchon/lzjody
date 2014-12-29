@@ -123,9 +123,9 @@ static int index_bytes(struct comp_data_t * const data)
 		c = *mem;
 		data->byte[c][data->bytecnt[c]] = pos;
 		data->bytecnt[c]++;
-//		DLOG("pos 0x%x, len 0x%x, byte 0x%x, cnt 0x%x\n",
-//				pos, data->length, c,
-//				data->bytecnt[c]);
+/*		DLOG("pos 0x%x, len 0x%x, byte 0x%x, cnt 0x%x\n",
+				pos, data->length, c,
+				data->bytecnt[c]); */
 		mem++;
 		pos++;
 		if (data->bytecnt[c] == MAX_LZ_BYTE_SCANS) break;
@@ -338,7 +338,7 @@ static int lzjb_find_lz(struct comp_data_t * const data)
 		}
 
 		remain = data->length - data->ipos;
-//		DLOG("LZ remain 0x%x at offset 0x%x ipos 0x%x\n", remain, offset, data->ipos);
+/*		DLOG("LZ remain 0x%x at offset 0x%x ipos 0x%x\n", remain, offset, data->ipos); */
 
 		/* If we can't possibly hit the minimum match, give up immediately */
 		if (remain < min_lz_match) goto end_lz_jump_match;

@@ -219,7 +219,7 @@ int main(int argc, char **argv)
 		if (!out) goto oom;
 		while(fread(blk, 1, 2, files->in)) {
 			/* Get block-level decompression options */
-			options = *blk & 0xf0;
+			options = *blk & 0xe0;
 
 			/* Read the length of the compressed data */
 			length = *(blk + 1);
@@ -236,7 +236,7 @@ int main(int argc, char **argv)
 			if (length > LZJB_BSIZE) goto error_blocksize_decomp;
 
 			i = fwrite(out, 1, length, files->out);
-//			DLOG("Wrote %d bytes\n", i);
+/*			DLOG("Wrote %d bytes\n", i); */
 
 			if (i != length) goto error_write;
 			blocknum++;

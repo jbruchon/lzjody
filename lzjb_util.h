@@ -24,7 +24,7 @@
 #include <lzjb.h>
 
 #define LZJB_UTIL_VER "0.1"
-#define LZJB_UTIL_VERDATE "2014-12-14"
+#define LZJB_UTIL_VERDATE "2014-12-29"
 
 /* Debugging stuff */
 #ifndef DLOG

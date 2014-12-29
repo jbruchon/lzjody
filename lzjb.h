@@ -22,7 +22,7 @@
 #define _LZJB_H
 
 #define LZJB_VER "0.1"
-#define LZJB_VERDATE "2014-12-14"
+#define LZJB_VERDATE "2014-12-29"
 
 /* Debugging stuff */
 #ifndef DLOG
