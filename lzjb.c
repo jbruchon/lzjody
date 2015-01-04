@@ -20,6 +20,7 @@
 
 #include <stdio.h>
 #include <stdint.h>
+#include "byteplane_xfrm.h"
 #include "lzjb.h"
 
 static int lzjb_find_lz(struct comp_data_t * const data);
@@ -54,57 +55,6 @@ static int compress_scan(struct comp_data_t * const data)
 		data->ipos++;
 	}
 	return 0;
-}
-
-/* Perform a byte plane transformation on some data
- * For example, a 4-plane transform on "1200120112021023" would change
- * that string into "1111222200000123", a string which is easily
- * compressible, unlike the original. The resulting string has three
- * RLE runs and one incremental sequence.
- * Passing a negative num_planes reverses the transformation.
- */
-static int byteplane_transform(const unsigned char * const in,
-		unsigned char * const out, int length,
-		char num_planes)
-{
-	int i;
-	int plane = 0;
-	int opos = 0;
-
-	if (num_planes > 1) {
-		/* Split 'in' to byteplanes, placing result in 'out' */
-		while (plane < num_planes) {
-			i = plane;
-			while (i < length) {
-				*(out + opos) = *(in + i);
-				opos++;
-				i += num_planes;
-			}
-			plane++;
-		}
-	} else if (num_planes > -1) goto error_planes;
-	else {
-		num_planes = -num_planes;
-		while (plane < num_planes) {
-			i = plane;
-			while (i < length) {
-				*(out + i) = *(in + opos);
-				opos++;
-				i += num_planes;
-			}
-			plane++;
-		}
-
-	}
-	if (opos != length) goto error_length;
-	return 0;
-
-error_planes:
-	fprintf(stderr, "liblzjb: byteplane_transform passed invalid plane count %d\n", num_planes);
-	return -1;
-error_length:
-	fprintf(stderr, "liblzjb: internal error: byteplane_transform opos 0x%x != length 0x%x\n", opos, length);
-	return -1;
 }
 
 /* Build an array of byte values for faster LZ matching */

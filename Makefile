@@ -34,13 +34,15 @@ lzjb.static: liblzjb.a lzjb_util.o
 lzjb: liblzjb.so lzjb_util.o
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(BUILD_CFLAGS) -llzjb -o lzjb lzjb_util.o
 
-liblzjb.so: lzjb.c
+liblzjb.so: lzjb.c byteplane_xfrm.c
+	$(CC) -c $(BUILD_CFLAGS) -fPIC $(CFLAGS) -o byteplane_xfrm_shared.o byteplane_xfrm.c
 	$(CC) -c $(BUILD_CFLAGS) -fPIC $(CFLAGS) -o lzjb_shared.o lzjb.c
-	$(CC) -shared -o liblzjb.so lzjb_shared.o
+	$(CC) -shared -o liblzjb.so lzjb_shared.o byteplane_xfrm_shared.o
 
-liblzjb.a: lzjb.c
+liblzjb.a: lzjb.c byteplane_xfrm.c
+	$(CC) -c $(BUILD_CFLAGS) $(CFLAGS) byteplane_xfrm.c
 	$(CC) -c $(BUILD_CFLAGS) $(CFLAGS) lzjb.c
-	$(AR) rcs liblzjb.a lzjb.o
+	$(AR) rcs liblzjb.a lzjb.o byteplane_xfrm.o
 
 #manual:
 #	gzip -9 < lzjb.8 > lzjb.8.gz
