@@ -37,13 +37,13 @@ make NOTHREADS=1
 
 You can also use DEBUG=1 to turn on some very annoying debugging messages.
 
-The LZJB library accepts blocks for compression up to 4096 bytes in size and
+The LZJODY library accepts blocks for compression up to 4096 bytes in size and
 is designed to guarantee no more than four bytes of data expansion for a
 block that is 100% incompressible. The compress/decompress functions return
 the number of bytes that are output by the function. This return value can
 be examined by the calling application and used to determine if it will be
 better to store the data uncompressed with an "out-of-band" indicator that
-the block is stored raw instead of in the LZJB compressed format.
+the block is stored raw instead of in the LZJODY compressed format.
 
 
 COMPRESSED DATA FORMAT
@@ -64,7 +64,7 @@ form. Bit 0x10 indicates a long LZ match that requires an additional byte
 of storage. Bits 0x20 and 0x40 select between LZ, RLE, and sequential
 increment compression. If 0x40, 0x20, and 0x10 are all zero, the lower 4
 bits are an "extended" command; the short form flag 0x80 can apply to
-extended commands. Refer to lzjb.h for the exact mapping of bits to
+extended commands. Refer to lzjody.h for the exact mapping of bits to
 algorithms and modifiers.
 
 For "standard" commands, the short forms store a 4-bit length or offset in
@@ -90,7 +90,7 @@ using a "jump list" of offsets for each byte. The data block is scanned by
 an indexer before LZ compression starts to make these lists and the scanner
 uses the byte value itself to find the correct list. If a particular byte
 results in a list that is very long (the exact threshold for which is in the
-lzjb.h header and was chosen through performance profiling) then the LZ
+lzjody.h header and was chosen through performance profiling) then the LZ
 compressor will fall back to the byte-by-byte linear scanner. This is done
 because following the jump list entries is more expensive than scanning all
 bytes one by one when too many bytes are of the value being scanned for.
@@ -112,7 +112,7 @@ INCREMENTAL SEQUENCE COMPRESSION
 --------------------------------
 
 Incremental sequences are runs of values that increase by 1 for every
-successive value. LZJB scans for sequences of 8, 16, and 32 bit widths and
+successive value. LZJODY scans for sequences of 8, 16, and 32 bit widths and
 reduces them to (start,count) pairs. For example, Seq(16) compression on the
 following 8-byte data stream:
 
@@ -181,3 +181,11 @@ This code has ONLY been tested on Intel i386 and x86_64 Linux platforms.
 Endianness or unaligned access issues are likely to be present if run on
 other platforms. Please submit patches to me if you have such a platform and
 can help fix the bugs without otherwise changing the behavior of the program.
+
+
+MISCELLANY
+----------
+
+lzjody was initially called "lzjody" and the name was changed to avoid confusion
+with an existing compression algorithm by the same name that is used in the
+ZFS filesystem.

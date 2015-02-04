@@ -19,8 +19,8 @@ Config.in
 # Normal output and testing dirs
 #
 /foo
-/lzjb
-/lzjb.static
+/lzjody
+/lzjody.static
 /debug.log
 /log.test.*
 /out.*

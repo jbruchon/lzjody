@@ -26,44 +26,44 @@ ifdef DEBUG
 BUILD_CFLAGS += -DDEBUG -g
 endif
 
-all: lzjb lzjb.static test
+all: lzjody lzjody.static test
 
-lzjb.static: liblzjb.a lzjb_util.o
-	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(BUILD_CFLAGS) -o lzjb.static lzjb_util.o liblzjb.a
+lzjody.static: liblzjody.a lzjody_util.o
+	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(BUILD_CFLAGS) -o lzjody.static lzjody_util.o liblzjody.a
 
-lzjb: liblzjb.so lzjb_util.o
-	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(BUILD_CFLAGS) -llzjb -o lzjb lzjb_util.o
+lzjody: liblzjody.so lzjody_util.o
+	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(BUILD_CFLAGS) -llzjody -o lzjody lzjody_util.o
 
-liblzjb.so: lzjb.c byteplane_xfrm.c
+liblzjody.so: lzjody.c byteplane_xfrm.c
 	$(CC) -c $(BUILD_CFLAGS) -fPIC $(CFLAGS) -o byteplane_xfrm_shared.o byteplane_xfrm.c
-	$(CC) -c $(BUILD_CFLAGS) -fPIC $(CFLAGS) -o lzjb_shared.o lzjb.c
-	$(CC) -shared -o liblzjb.so lzjb_shared.o byteplane_xfrm_shared.o
+	$(CC) -c $(BUILD_CFLAGS) -fPIC $(CFLAGS) -o lzjody_shared.o lzjody.c
+	$(CC) -shared -o liblzjody.so lzjody_shared.o byteplane_xfrm_shared.o
 
-liblzjb.a: lzjb.c byteplane_xfrm.c
+liblzjody.a: lzjody.c byteplane_xfrm.c
 	$(CC) -c $(BUILD_CFLAGS) $(CFLAGS) byteplane_xfrm.c
-	$(CC) -c $(BUILD_CFLAGS) $(CFLAGS) lzjb.c
-	$(AR) rcs liblzjb.a lzjb.o byteplane_xfrm.o
+	$(CC) -c $(BUILD_CFLAGS) $(CFLAGS) lzjody.c
+	$(AR) rcs liblzjody.a lzjody.o byteplane_xfrm.o
 
 #manual:
-#	gzip -9 < lzjb.8 > lzjb.8.gz
+#	gzip -9 < lzjody.8 > lzjody.8.gz
 
 .c.o:
 	$(CC) -c $(BUILD_CFLAGS) $(CFLAGS) $<
 
 clean:
-	rm -f *.o *.a *~ .*un~ lzjb lzjb*.static *.so* debug.log *.?.gz log.test.* out.*
+	rm -f *.o *.a *~ .*un~ lzjody lzjody*.static *.so* debug.log *.?.gz log.test.* out.*
 
 distclean:
-	rm -f *.o *.a *~ .*un~ lzjb lzjb*.static *.so* debug.log *.?.gz log.test.* out.* *.pkg.tar.*
+	rm -f *.o *.a *~ .*un~ lzjody lzjody*.static *.so* debug.log *.?.gz log.test.* out.* *.pkg.tar.*
 
 install: all
-	install -D -o root -g root -m 0755 lzjb $(bindir)/lzjb
-	install -D -o root -g root -m 0755 liblzjb.so $(libdir)/liblzjb.so
-	install -D -o root -g root -m 0644 liblzjb.a $(libdir)/liblzjb.a
-	install -D -o root -g root -m 0644 lzjb.h $(includedir)/lzjb.h
-#	install -D -o root -g root -m 0644 lzjb.8.gz $(mandir)/man8/lzjb.8.gz
+	install -D -o root -g root -m 0755 lzjody $(bindir)/lzjody
+	install -D -o root -g root -m 0755 liblzjody.so $(libdir)/liblzjody.so
+	install -D -o root -g root -m 0644 liblzjody.a $(libdir)/liblzjody.a
+	install -D -o root -g root -m 0644 lzjody.h $(includedir)/lzjody.h
+#	install -D -o root -g root -m 0644 lzjody.8.gz $(mandir)/man8/lzjody.8.gz
 
-test: lzjb.static
+test: lzjody.static
 	./test.sh
 
 package:
