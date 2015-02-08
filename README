@@ -46,6 +46,17 @@ better to store the data uncompressed with an "out-of-band" indicator that
 the block is stored raw instead of in the LZJODY compressed format.
 
 
+KNOWN BUGS AND QUIRKS
+---------------------
+
+- lzjody seems to compress the same data slightly differently sometimes. The
+  cause is not yet known and the phenomenon is only very rarely observed.
+  Thorough testing has shown that decompressed data is consistently correct
+  even when this rare glitch in compression occurs, and observed differences
+  in final size only seem to deviate approximately 6 bytes for every 600MB of
+  compressed data.
+
+
 COMPRESSED DATA FORMAT
 ----------------------
 
