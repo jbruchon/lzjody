@@ -23,11 +23,11 @@
 #include "byteplane_xfrm.h"
 #include "lzjody.h"
 
-static int lzjody_find_lz(struct comp_data_t * const data);
-static int lzjody_find_rle(struct comp_data_t * const data);
-static int lzjody_find_seq(struct comp_data_t * const data);
+static int lzjody_find_lz(struct comp_data_t * const restrict data);
+static int lzjody_find_rle(struct comp_data_t * const restrict data);
+static int lzjody_find_seq(struct comp_data_t * const restrict data);
 
-static int compress_scan(struct comp_data_t * const data)
+static int compress_scan(struct comp_data_t * const restrict data)
 {
 	int err;
 
@@ -58,10 +58,10 @@ static int compress_scan(struct comp_data_t * const data)
 }
 
 /* Build an array of byte values for faster LZ matching */
-static int index_bytes(struct comp_data_t * const data)
+static int index_bytes(struct comp_data_t * const restrict data)
 {
 	unsigned int pos = 0;
-	const unsigned char *mem = data->in;
+	const unsigned char * restrict mem = data->in;
 	unsigned char c;
 
 	/* Clear any existing index */
@@ -89,7 +89,7 @@ error_index:
 
 /* Write the control byte(s) that define data
  * type is the P_xxx value that determines the type of the control byte */
-static int lzjody_write_control(struct comp_data_t * const data,
+static int lzjody_write_control(struct comp_data_t * const restrict data,
 		const unsigned char type,
 		const uint16_t value)
 {
@@ -142,7 +142,7 @@ error_value_too_large:
 }
 
 /* Write out all pending literals without further processing */
-static int lzjody_really_flush_literals(struct comp_data_t * const data)
+static int lzjody_really_flush_literals(struct comp_data_t * const restrict data)
 {
 	unsigned int i = 0;
 	int err;
@@ -171,7 +171,7 @@ error_opos:
 }
 
 /* Intercept a stream of literals and try byte plane transformation */
-static int lzjody_flush_literals(struct comp_data_t * const data)
+static int lzjody_flush_literals(struct comp_data_t * const restrict data)
 {
 	unsigned char lit_in[LZJODY_BSIZE + 4];
 	unsigned char lit_out[LZJODY_BSIZE + 4];
@@ -180,7 +180,7 @@ static int lzjody_flush_literals(struct comp_data_t * const data)
 
 	/* Initialize compression data structure */
 	struct comp_data_t d2;
-	struct comp_data_t * const data2 = &d2;
+	struct comp_data_t * const restrict data2 = &d2;
 
 	/* For zero literals we'll just do nothing. */
 	if (data->literals == 0) return 0;
@@ -246,7 +246,7 @@ static int lzjody_flush_literals(struct comp_data_t * const data)
 }
 
 /* Find best LZ data match for current input position */
-static int lzjody_find_lz(struct comp_data_t * const data)
+static int lzjody_find_lz(struct comp_data_t * const restrict data)
 {
 	int scan = 0;
 	const unsigned char *m0, *m1, *m2;	/* pointers for matches */
@@ -417,7 +417,7 @@ end_lz_matches:
 }
 
 /* Find best RLE data match for current input position */
-static int lzjody_find_rle(struct comp_data_t * const data)
+static int lzjody_find_rle(struct comp_data_t * const restrict data)
 {
 	const unsigned char c = *(data->in + data->ipos);
 	unsigned int length = 0;
@@ -447,7 +447,7 @@ static int lzjody_find_rle(struct comp_data_t * const data)
 }
 
 /* Find sequential values for compression */
-static int lzjody_find_seq(struct comp_data_t * const data)
+static int lzjody_find_seq(struct comp_data_t * const restrict data)
 {
 	uint8_t num8;
 	uint8_t *m8 = (uint8_t *)((uintptr_t)data->in + (uintptr_t)data->ipos);
@@ -551,7 +551,7 @@ extern int lzjody_compress(const unsigned char * const blk_in,
 
 	/* Initialize compression data structure */
 	struct comp_data_t comp_data;
-	struct comp_data_t * const data = &comp_data;
+	struct comp_data_t * const restrict data = &comp_data;
 
 	DLOG("Comp: blk len 0x%x\n", length);
 
@@ -625,9 +625,9 @@ extern int lzjody_decompress(const unsigned char * const in,
 	unsigned char *mem2;
 	/* FIXME: volatile to prevent vectorization (-fno-tree-loop-vectorize)
 	 * Should probably find another way to prevent unaligned vector access */
-	volatile uint32_t *m32;
+	uint32_t *m32;
 	volatile uint16_t *m16;
-	volatile uint8_t *m8;
+	uint8_t *m8;
 	uint32_t num32;
 	uint16_t num16;
 	uint8_t num8;
