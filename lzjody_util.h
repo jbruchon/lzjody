@@ -18,8 +18,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#ifndef _LZJODY_UTIL_H
-#define _LZJODY_UTIL_H
+#ifndef LZJODY_UTIL_H
+#define LZJODY_UTIL_H
 
 #include <lzjody.h>
 
@@ -58,5 +58,4 @@ struct thread_info {
 	int working;	/* Is thread working (1) or idle (0)? */
 };
 
-#endif	/* _LZJODY_UTIL_H */
-
+#endif	/* LZJODY_UTIL_H */

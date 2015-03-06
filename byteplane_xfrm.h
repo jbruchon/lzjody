@@ -6,10 +6,10 @@
  * See byteplane_xfrm.c for more information.
  */
 
-#ifndef _BYTEPLANE_XFRM_H
-#define _BYTEPLANE_XFRM_H
+#ifndef BYTEPLANE_XFRM_H
+#define BYTEPLANE_XFRM_H
 
 extern int byteplane_transform(const unsigned char * const,
 		unsigned char * const, int, char);
 
-#endif	/*  _BYTEPLANE_XFRM_H */
+#endif	/*  BYTEPLANE_XFRM_H */

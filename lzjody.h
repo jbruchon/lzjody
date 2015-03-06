@@ -18,8 +18,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#ifndef _LZJODY_H
-#define _LZJODY_H
+#ifndef LZJODY_H
+#define LZJODY_H
 
 #define LZJODY_VER "0.1"
 #define LZJODY_VERDATE "2014-12-29"
@@ -108,5 +108,4 @@ extern int lzjody_compress(const unsigned char * const, unsigned char * const,
 extern int lzjody_decompress(const unsigned char * const, unsigned char * const,
 		const unsigned int, const unsigned int);
 
-#endif	/* _LZJODY_H */
-
+#endif	/* LZJODY_H */
