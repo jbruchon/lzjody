@@ -4,7 +4,7 @@ CFLAGS=-O3 -ftree-vectorize -fgcse-las -flto -ffat-lto-objects
 # Try these if the compiler complains or you need to debug
 #CFLAGS=-O3 -g
 #CFLAGS=-Og -g3
-BUILD_CFLAGS=-std=gnu99 -I. -D_FILE_OFFSET_BITS=64 -fstrict-aliasing -pipe -Wall -Wcast-align -Wstrict-aliasing=2 -pedantic
+BUILD_CFLAGS=-std=gnu99 -I. -D_FILE_OFFSET_BITS=64 -fstrict-aliasing -pipe -Wall -Wextra -Wcast-align -Wstrict-aliasing -pedantic
 LDFLAGS=-L.
 LDLIBS=
 

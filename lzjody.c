@@ -248,16 +248,16 @@ static int lzjody_flush_literals(struct comp_data_t * const restrict data)
 /* Find best LZ data match for current input position */
 static int lzjody_find_lz(struct comp_data_t * const restrict data)
 {
-	int scan = 0;
+	unsigned int scan = 0;
 	const unsigned char *m0, *m1, *m2;	/* pointers for matches */
-	int length;	/* match length */
+	unsigned int length;	/* match length */
 	const unsigned int in_remain = data->length - data->ipos;
-	int remain;	/* remaining matches possible */
+	unsigned int remain;	/* remaining matches possible */
 	int done = 0;	/* Used to terminate matching */
-	int best_lz = 0;
+	unsigned int best_lz = 0;
 	int best_lz_start = 0;
 	unsigned int total_scans;
-	int offset;
+	unsigned int offset;
 	unsigned int min_lz_match = MIN_LZ_MATCH;
 	int err;
 
@@ -458,7 +458,7 @@ static int lzjody_find_seq(struct comp_data_t * const restrict data)
 	uint32_t num32;
 	uint32_t *m32 = (uint32_t *)((uintptr_t)data->in + (uintptr_t)data->ipos);
 	const uint32_t num_orig32 = *m32;
-	int seqcnt;
+	unsigned int seqcnt;
 	unsigned int big_literals = 0;
 	int err;
 
@@ -633,7 +633,7 @@ extern int lzjody_decompress(const unsigned char * const in,
 	uint8_t num8;
 	unsigned int seqbits = 0;
 	unsigned char *bp_out;
-	int bp_length;
+	unsigned int bp_length;
 	unsigned char bp_temp[LZJODY_BSIZE];
 	int err;
 
@@ -654,8 +654,8 @@ extern int lzjody_decompress(const unsigned char * const in,
 			/* Initializer for sequence/byteplane commands */
 			if (mode & (P_SMASK | P_PLANE)) {
 				length = *(in + ipos);
-				if (mode & P_SMASK) DLOG("Seq length: %x\n", length);
-				if (mode & P_PLANE) DLOG("Byte plane length: %x\n", length);
+				if (mode & P_SMASK) { DLOG("Seq length: %x\n", length); }
+				if (mode & P_PLANE) { DLOG("Byte plane length: %x\n", length); }
 				ipos++;
 				/* Long form has a high byte */
 				if (!sl) {
