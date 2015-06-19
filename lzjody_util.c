@@ -71,17 +71,17 @@ int main(int argc, char **argv)
 	unsigned char *blk, *out;
 	int i;
 	int length = 0;	/* Incoming data block length counter */
-	unsigned int blocknum = 0;	/* Current block number */
-	unsigned int options = 0;	/* Compressor options */
+	int blocknum = 0;	/* Current block number */
+	unsigned char options = 0;	/* Compressor options */
 #ifdef THREADED
 	struct thread_info *thr;
 	struct thread_info *cur;
 	uint32_t min_blk;	/* Minimum block number */
 	unsigned int min_thread;	/* Thread for min_blk */
-	unsigned int thread;	/* Temporary thread scan counter */
-	unsigned int open_thr;	/* Next open thread */
-	unsigned int nprocs = 1;	/* Number of processors */
-	unsigned int running = 0;	/* Number of threads running */
+	int thread;	/* Temporary thread scan counter */
+	int open_thr;	/* Next open thread */
+	int nprocs = 1;		/* Number of processors */
+	char running = 0;	/* Number of threads running */
 	int eof = 0;	/* End of file? */
 #endif /* THREADED */
 
@@ -110,8 +110,8 @@ int main(int argc, char **argv)
 #else /* Using POSIX threads */
 		/* Get number of online processors for pthreads */
  #ifdef _SC_NPROCESSORS_ONLN
-		nprocs = (unsigned int)sysconf(_SC_NPROCESSORS_ONLN);
-		if (nprocs < 1 || nprocs > 32768) {
+		nprocs = (int)sysconf(_SC_NPROCESSORS_ONLN);
+		if (nprocs < 1) {
 			fprintf(stderr, "warning: system returned bad number of processors: %d\n", nprocs);
 			nprocs = 1;
 		}
@@ -125,7 +125,7 @@ int main(int argc, char **argv)
 		if (!thr) goto oom;
 
 		/* Set compressor options */
-		for (i = 0; i < (int)nprocs; i++) (thr + i)->options = options;
+		for (i = 0; i < nprocs; i++) (thr + i)->options = options;
 
 		thread_error = 0;
 		while (1) {
@@ -138,7 +138,7 @@ int main(int argc, char **argv)
 				for (thread = 0; thread < nprocs; thread++) {
 					if (thread_error != 0) goto error_compression;
 					i = (thr + thread)->block;
-					if (i > 0 && i < (int)min_blk) {
+					if (i > 0 && i < min_blk) {
 						min_blk = i;
 						min_thread = thread;
 					}
