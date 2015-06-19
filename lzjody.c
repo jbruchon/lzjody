@@ -654,8 +654,10 @@ extern int lzjody_decompress(const unsigned char * const in,
 			/* Initializer for sequence/byteplane commands */
 			if (mode & (P_SMASK | P_PLANE)) {
 				length = *(in + ipos);
-				if (mode & P_SMASK) DLOG("Seq length: %x\n", length);
-				if (mode & P_PLANE) DLOG("Byte plane length: %x\n", length);
+#ifdef DEBUG
+				if (mode & P_SMASK) { DLOG("Seq length: %x\n", length); }
+				if (mode & P_PLANE) { DLOG("Byte plane length: %x\n", length); }
+#endif /* DLOG */
 				ipos++;
 				/* Long form has a high byte */
 				if (!sl) {
