@@ -213,6 +213,10 @@ static int lzjody_flush_literals(struct comp_data_t * const restrict data)
 			lit_in, data->literals, 4);
 	if (err < 0) return err;
 
+	/* Load arrays for match speedup */
+	err = index_bytes(data2);
+	if (err < 0) return err;
+
 	/* Try to compress the data again */
 	err = compress_scan(data2);
 	if (err < 0) return err;
