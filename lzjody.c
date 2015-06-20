@@ -252,16 +252,16 @@ static int lzjody_flush_literals(struct comp_data_t * const restrict data)
 /* Find best LZ data match for current input position */
 static int lzjody_find_lz(struct comp_data_t * const restrict data)
 {
-	int scan = 0;
+	unsigned int scan = 0;
 	const unsigned char *m0, *m1, *m2;	/* pointers for matches */
-	int length;	/* match length */
+	unsigned int length;	/* match length */
 	const unsigned int in_remain = data->length - data->ipos;
-	int remain;	/* remaining matches possible */
+	unsigned int remain;	/* remaining matches possible */
 	int done = 0;	/* Used to terminate matching */
-	int best_lz = 0;
+	unsigned int best_lz = 0;
 	int best_lz_start = 0;
 	unsigned int total_scans;
-	int offset;
+	unsigned int offset;
 	unsigned int min_lz_match = MIN_LZ_MATCH;
 	int err;
 
@@ -292,6 +292,9 @@ static int lzjody_find_lz(struct comp_data_t * const restrict data)
 		}
 
 		remain = data->length - data->ipos;
+		/* Handle underflow */
+		if (remain > LZJODY_BSIZE) goto err_remain_underflow;
+
 /*		DLOG("LZ remain 0x%x at offset 0x%x ipos 0x%x\n", remain, offset, data->ipos); */
 
 		/* If we can't possibly hit the minimum match, give up immediately */
@@ -418,6 +421,10 @@ end_lz_matches:
 		return 1;
 	}
 	return 0;
+
+err_remain_underflow:
+	fprintf(stderr, "liblzjody: internal error: LZ 'remain' underflowed\n");
+	return -1;
 }
 
 /* Find best RLE data match for current input position */
@@ -462,7 +469,7 @@ static int lzjody_find_seq(struct comp_data_t * const restrict data)
 	uint32_t num32;
 	uint32_t *m32 = (uint32_t *)((uintptr_t)data->in + (uintptr_t)data->ipos);
 	const uint32_t num_orig32 = *m32;
-	int seqcnt;
+	unsigned int seqcnt;
 	unsigned int big_literals = 0;
 	int err;
 
@@ -637,7 +644,7 @@ extern int lzjody_decompress(const unsigned char * const in,
 	uint8_t num8;
 	unsigned int seqbits = 0;
 	unsigned char *bp_out;
-	int bp_length;
+	unsigned int bp_length;
 	unsigned char bp_temp[LZJODY_BSIZE];
 	int err;
 
