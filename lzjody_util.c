@@ -40,9 +40,9 @@ struct files_t * const files = &file_vars;
 #ifdef THREADED
 static void *compress_thread(void *arg)
 {
-	struct thread_info * const thr = arg;
-	unsigned char *ipos = thr->blk;	/* Uncompressed input pointer */
-	unsigned char *opos = thr->out;	/* Compressed output pointer */
+	struct thread_info * const restrict thr = arg;
+	const unsigned char * restrict ipos = thr->blk;	/* Uncompressed input pointer */
+	unsigned char * restrict opos = thr->out;	/* Compressed output pointer */
 	int i;
 	int bsize = LZJODY_BSIZE;	/* Compressor block size */
 	int remain = thr->length;	/* Remaining input bytes */
@@ -68,8 +68,10 @@ static void *compress_thread(void *arg)
 
 int main(int argc, char **argv)
 {
-	unsigned char *blk, *out;
+	static unsigned char blk[LZJODY_BSIZE];
+	static unsigned char out[LZJODY_BSIZE + 4];
 	int i;
+	unsigned int j;
 	int length = 0;	/* Incoming data block length counter */
 	int blocknum = 0;	/* Current block number */
 	unsigned char options = 0;	/* Compressor options */
@@ -90,13 +92,8 @@ int main(int argc, char **argv)
 	files->out = stdout;
 
 	if (!strncmp(argv[1], "-c", 2)) {
-		/* Read input, compress it, write compressed output */
 #ifndef THREADED
 		/* Non-threaded compression */
-		blk = (unsigned char *)malloc(LZJODY_BSIZE);
-		if (!blk) goto oom;
-		out = (unsigned char *)malloc(LZJODY_BSIZE + 4);
-		if (!out) goto oom;
 		while((length = fread(blk, 1, LZJODY_BSIZE, files->in))) {
 			if (ferror(files->in)) goto error_read;
 			DLOG("--- Compressing block %d\n", blocknum);
@@ -107,15 +104,17 @@ int main(int argc, char **argv)
 			if (!i) goto error_write;
 			blocknum++;
 		}
+
 #else /* Using POSIX threads */
+
+# ifdef _SC_NPROCESSORS_ONLN
 		/* Get number of online processors for pthreads */
- #ifdef _SC_NPROCESSORS_ONLN
 		nprocs = (int)sysconf(_SC_NPROCESSORS_ONLN);
 		if (nprocs < 1) {
 			fprintf(stderr, "warning: system returned bad number of processors: %d\n", nprocs);
 			nprocs = 1;
 		}
- #endif /* _SC_NPROCESSORS_ONLN */
+# endif /* _SC_NPROCESSORS_ONLN */
 		/* Run two threads per processor */
 		nprocs <<= 1;
 		fprintf(stderr, "lzjody: compressing with %d worker threads\n", nprocs);
@@ -137,9 +136,9 @@ int main(int argc, char **argv)
 				pthread_mutex_lock(&mtx);
 				for (thread = 0; thread < nprocs; thread++) {
 					if (thread_error != 0) goto error_compression;
-					i = (thr + thread)->block;
-					if (i > 0 && i < min_blk) {
-						min_blk = i;
+					j = (thr + thread)->block;
+					if (j > 0 && j < min_blk) {
+						min_blk = j;
 						min_thread = thread;
 					}
 				}
@@ -208,15 +207,12 @@ int main(int argc, char **argv)
 				}
 			}
 		}
+		free(thr);
 #endif /* THREADED */
 	}
 
 	/* Decompress */
 	if (!strncmp(argv[1], "-d", 2)) {
-		blk = (unsigned char *)malloc(LZJODY_BSIZE + 4);
-		if (!blk) goto oom;
-		out = (unsigned char *)malloc(LZJODY_BSIZE);
-		if (!out) goto oom;
 		while(fread(blk, 1, 2, files->in)) {
 			/* Get block-level decompression options */
 			options = *blk & 0xe0;
