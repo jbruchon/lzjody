@@ -480,7 +480,8 @@ static int lzjody_find_seq(struct comp_data_t * const restrict data)
 	seqcnt = 0;
 	num32 = *m32;
 	/* Loop bounds check compensates for bit width of data elements */
-	while (((data->ipos + (seqcnt << 2) + 3) < data->length) && (*m32 == num32)) {
+	while (*m32 == num32) {
+		if ((data->ipos + (seqcnt << 2) + 3) < data->length) break;
 		seqcnt++;
 		num32++;
 		m32++;
@@ -503,7 +504,8 @@ static int lzjody_find_seq(struct comp_data_t * const restrict data)
 	seqcnt = 0;
 	num16 = *m16;
 	/* Loop bounds check compensates for bit width of data elements */
-	while (((data->ipos + (seqcnt << 1) + 1) < data->length) && (*m16 == num16)) {
+	while (*m16 == num16) {
+		if ((data->ipos + (seqcnt << 1) + 1) < data->length) break;
 		seqcnt++;
 		num16++;
 		m16++;
@@ -525,7 +527,8 @@ static int lzjody_find_seq(struct comp_data_t * const restrict data)
 	/* 8-bit sequences */
 	seqcnt = 0;
 	num8 = *m8;
-	while (((data->ipos + seqcnt) < data->length) && (*m8 == num8)) {
+	while (*m8 == num8) {
+		if ((data->ipos + seqcnt) < data->length) break;
 		seqcnt++;
 		num8++;
 		m8++;
@@ -628,7 +631,7 @@ extern int lzjody_decompress(const unsigned char * const in,
 	register unsigned int ipos = 0;
 	register unsigned int opos = 0;
 	unsigned int offset;
-	unsigned int length = 0;
+	register unsigned int length = 0;
 	unsigned int sl;	/* short/long */
 	unsigned int control = 0;
 	unsigned char c;
