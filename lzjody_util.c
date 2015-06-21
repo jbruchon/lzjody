@@ -120,7 +120,7 @@ int main(int argc, char **argv)
 		fprintf(stderr, "lzjody: compressing with %d worker threads\n", nprocs);
 
 		/* Allocate per-thread input/output memory and control blocks */
-		thr = (struct thread_info *)calloc(nprocs, sizeof(struct thread_info));
+		thr = (struct thread_info *)malloc(sizeof(struct thread_info) * nprocs);
 		if (!thr) goto oom;
 
 		/* Set compressor options */
