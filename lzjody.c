@@ -23,11 +23,11 @@
 #include "byteplane_xfrm.h"
 #include "lzjody.h"
 
-static int lzjody_find_lz(struct comp_data_t * const restrict data);
-static int lzjody_find_rle(struct comp_data_t * const restrict data);
-static int lzjody_find_seq32(struct comp_data_t * const restrict data);
-static int lzjody_find_seq16(struct comp_data_t * const restrict data);
-static int lzjody_find_seq8(struct comp_data_t * const restrict data);
+static inline int lzjody_find_lz(struct comp_data_t * const restrict data);
+static inline int lzjody_find_rle(struct comp_data_t * const restrict data);
+static inline int lzjody_find_seq32(struct comp_data_t * const restrict data);
+static inline int lzjody_find_seq16(struct comp_data_t * const restrict data);
+static inline int lzjody_find_seq8(struct comp_data_t * const restrict data);
 
 static int compress_scan(struct comp_data_t * const restrict data)
 {
@@ -188,7 +188,6 @@ static int lzjody_flush_literals(struct comp_data_t * const restrict data)
 
 	/* Initialize compression data structure */
 	struct comp_data_t d2;
-	struct comp_data_t * const restrict data2 = &d2;
 
 	/* For zero literals we'll just do nothing. */
 	if (data->literals == 0) return 0;
@@ -222,33 +221,33 @@ static int lzjody_flush_literals(struct comp_data_t * const restrict data)
 	if (err < 0) return err;
 
 	/* Load arrays for match speedup */
-	err = index_bytes(data2);
+	err = index_bytes(&d2);
 	if (err < 0) return err;
 
 	/* Try to compress the data again */
-	err = compress_scan(data2);
+	err = compress_scan(&d2);
 	if (err < 0) return err;
-	err = lzjody_really_flush_literals(data2);
+	err = lzjody_really_flush_literals(&d2);
 	if (err < 0) return err;
 
 	/* If there was not enough of a size improvement, give up */
-	if ((data2->opos + 2) >= data2->length) {
+	if ((d2.opos + 2) >= d2.length) {
 		DLOG("[bp] No improvement, skipping (0x%x >= 0x%x)\n",
-				data2->opos,
-				data2->length);
+				d2.opos,
+				d2.length);
 		err = lzjody_really_flush_literals(data);
 		if (err < 0) return err;
 		return 0;
 	}
 
 	/* Dump the newly compressed data as a literal stream */
-	DLOG("Improvement: 0x%x -> 0x%x\n", data2->length, data2->opos);
-	err = lzjody_write_control(data, P_PLANE, data2->opos);
+	DLOG("Improvement: 0x%x -> 0x%x\n", d2.length, d2.opos);
+	err = lzjody_write_control(data, P_PLANE, d2.opos);
 	if (err < 0) return err;
 
 	i = 0;
-	while (i < data2->opos) {
-		*(data->out + data->opos) = *(data2->out + i);
+	while (i < d2.opos) {
+		*(data->out + data->opos) = *(d2.out + i);
 		data->opos++;
 		i++;
 	}
@@ -258,7 +257,7 @@ static int lzjody_flush_literals(struct comp_data_t * const restrict data)
 }
 
 /* Find best LZ data match for current input position */
-static int lzjody_find_lz(struct comp_data_t * const restrict data)
+static inline int lzjody_find_lz(struct comp_data_t * const restrict data)
 {
 	unsigned int scan = 0;
 	const unsigned char *m0, *m1, *m2;	/* pointers for matches */
@@ -436,7 +435,7 @@ err_remain_underflow:
 }
 
 /* Find best RLE data match for current input position */
-static int lzjody_find_rle(struct comp_data_t * const restrict data)
+static inline int lzjody_find_rle(struct comp_data_t * const restrict data)
 {
 	const unsigned char c = *(data->in + data->ipos);
 	unsigned int length = 0;
@@ -466,7 +465,7 @@ static int lzjody_find_rle(struct comp_data_t * const restrict data)
 }
 
 /* Find sequential 32-bit values for compression */
-static int lzjody_find_seq32(struct comp_data_t * const restrict data)
+static inline int lzjody_find_seq32(struct comp_data_t * const restrict data)
 {
 	uint32_t num32;
 	uint32_t *m32 = (uint32_t *)((uintptr_t)data->in + (uintptr_t)data->ipos);
@@ -506,7 +505,7 @@ static int lzjody_find_seq32(struct comp_data_t * const restrict data)
 }
 
 /* Find sequential 16-bit values for compression */
-static int lzjody_find_seq16(struct comp_data_t * const restrict data)
+static inline int lzjody_find_seq16(struct comp_data_t * const restrict data)
 {
 	uint16_t num16;
 	uint16_t *m16 = (uint16_t *)((uintptr_t)data->in + (uintptr_t)data->ipos);
@@ -544,7 +543,7 @@ static int lzjody_find_seq16(struct comp_data_t * const restrict data)
 }
 
 /* Find sequential 8-bit values for compression */
-static int lzjody_find_seq8(struct comp_data_t * const restrict data)
+static inline int lzjody_find_seq8(struct comp_data_t * const restrict data)
 {
 	uint8_t num8;
 	uint8_t *m8 = (uint8_t *)((uintptr_t)data->in + (uintptr_t)data->ipos);
