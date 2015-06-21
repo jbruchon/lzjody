@@ -481,7 +481,7 @@ static int lzjody_find_seq(struct comp_data_t * const restrict data)
 	num32 = *m32;
 	/* Loop bounds check compensates for bit width of data elements */
 	while (*m32 == num32) {
-		if ((data->ipos + (seqcnt << 2) + 3) < data->length) break;
+		if ((data->ipos + (seqcnt << 2) + 3) >= data->length) break;
 		seqcnt++;
 		num32++;
 		m32++;
@@ -505,7 +505,7 @@ static int lzjody_find_seq(struct comp_data_t * const restrict data)
 	num16 = *m16;
 	/* Loop bounds check compensates for bit width of data elements */
 	while (*m16 == num16) {
-		if ((data->ipos + (seqcnt << 1) + 1) < data->length) break;
+		if ((data->ipos + (seqcnt << 1) + 1) >= data->length) break;
 		seqcnt++;
 		num16++;
 		m16++;
@@ -528,7 +528,7 @@ static int lzjody_find_seq(struct comp_data_t * const restrict data)
 	seqcnt = 0;
 	num8 = *m8;
 	while (*m8 == num8) {
-		if ((data->ipos + seqcnt) < data->length) break;
+		if ((data->ipos + seqcnt) >= data->length) break;
 		seqcnt++;
 		num8++;
 		m8++;
