@@ -25,7 +25,9 @@
 
 static int lzjody_find_lz(struct comp_data_t * const restrict data);
 static int lzjody_find_rle(struct comp_data_t * const restrict data);
-static int lzjody_find_seq(struct comp_data_t * const restrict data);
+static int lzjody_find_seq32(struct comp_data_t * const restrict data);
+static int lzjody_find_seq16(struct comp_data_t * const restrict data);
+static int lzjody_find_seq8(struct comp_data_t * const restrict data);
 
 static int compress_scan(struct comp_data_t * const restrict data)
 {
@@ -41,7 +43,13 @@ static int compress_scan(struct comp_data_t * const restrict data)
 		if (err < 0) return err;
 		if (err > 0) continue;
 
-		err = lzjody_find_seq(data);
+		err = lzjody_find_seq8(data);
+		if (err < 0) return err;
+		if (err > 0) continue;
+		err = lzjody_find_seq16(data);
+		if (err < 0) return err;
+		if (err > 0) continue;
+		err = lzjody_find_seq32(data);
 		if (err < 0) return err;
 		if (err > 0) continue;
 
@@ -457,15 +465,9 @@ static int lzjody_find_rle(struct comp_data_t * const restrict data)
 	return 0;
 }
 
-/* Find sequential values for compression */
-static int lzjody_find_seq(struct comp_data_t * const restrict data)
+/* Find sequential 32-bit values for compression */
+static int lzjody_find_seq32(struct comp_data_t * const restrict data)
 {
-	uint8_t num8;
-	uint8_t *m8 = (uint8_t *)((uintptr_t)data->in + (uintptr_t)data->ipos);
-	const uint8_t num_orig8 = *m8;
-	uint16_t num16;
-	uint16_t *m16 = (uint16_t *)((uintptr_t)data->in + (uintptr_t)data->ipos);
-	const uint16_t num_orig16 = *m16;
 	uint32_t num32;
 	uint32_t *m32 = (uint32_t *)((uintptr_t)data->in + (uintptr_t)data->ipos);
 	const uint32_t num_orig32 = *m32;
@@ -499,9 +501,23 @@ static int lzjody_find_seq(struct comp_data_t * const restrict data)
 		data->ipos += (seqcnt << 2);
 		return 1;
 	}
-	/* End 32-bit sequences */
 
-	/* 16-bit sequences */
+	return 0;
+}
+
+/* Find sequential 16-bit values for compression */
+static int lzjody_find_seq16(struct comp_data_t * const restrict data)
+{
+	uint16_t num16;
+	uint16_t *m16 = (uint16_t *)((uintptr_t)data->in + (uintptr_t)data->ipos);
+	const uint16_t num_orig16 = *m16;
+	unsigned int seqcnt;
+	unsigned int big_literals = 0;
+	int err;
+
+	/* If literal count > short form constraints, avoid data expansion */
+	if (data->literals > P_SHORT_MAX) big_literals = 1;
+
 	seqcnt = 0;
 	num16 = *m16;
 	/* Loop bounds check compensates for bit width of data elements */
@@ -523,9 +539,23 @@ static int lzjody_find_seq(struct comp_data_t * const restrict data)
 		data->ipos += (seqcnt << 1);
 		return 1;
 	}
-	/* End 16-bit sequences */
 
-	/* 8-bit sequences */
+	return 0;
+}
+
+/* Find sequential 8-bit values for compression */
+static int lzjody_find_seq8(struct comp_data_t * const restrict data)
+{
+	uint8_t num8;
+	uint8_t *m8 = (uint8_t *)((uintptr_t)data->in + (uintptr_t)data->ipos);
+	const uint8_t num_orig8 = *m8;
+	unsigned int seqcnt;
+	unsigned int big_literals = 0;
+	int err;
+
+	/* If literal count > short form constraints, avoid data expansion */
+	if (data->literals > P_SHORT_MAX) big_literals = 1;
+
 	seqcnt = 0;
 	num8 = *m8;
 	while (*m8 == num8) {
@@ -546,7 +576,6 @@ static int lzjody_find_seq(struct comp_data_t * const restrict data)
 		data->ipos += seqcnt;
 		return 1;
 	}
-	/* End 8-bit sequences */
 	return 0;
 }
 
