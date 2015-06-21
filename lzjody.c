@@ -481,11 +481,12 @@ static int lzjody_find_seq(struct comp_data_t * const restrict data)
 	num32 = *m32;
 	/* Loop bounds check compensates for bit width of data elements */
 	while (*m32 == num32) {
-		if ((data->ipos + (seqcnt << 2) + 3) >= data->length) break;
-		seqcnt++;
+		if ((data->ipos + seqcnt + 3) >= data->length) break;
+		seqcnt += 4;
 		num32++;
 		m32++;
 	}
+	seqcnt >>= 2;
 
 	if (seqcnt >= (MIN_SEQ32_LENGTH + big_literals)) {
 		DLOG("Seq(32): start 0x%x, 0x%x items\n", num_orig32, seqcnt);
