@@ -69,7 +69,6 @@ static int compress_scan(struct comp_data_t * const restrict data)
 static int index_bytes(struct comp_data_t * const restrict data)
 {
 	unsigned int pos = 0;
-	const unsigned char * restrict mem = data->in;
 	unsigned char c;
 
 	/* Clear any existing index */
@@ -78,13 +77,12 @@ static int index_bytes(struct comp_data_t * const restrict data)
 	/* Read each byte and add its offset to its list */
 	if (data->length < MIN_LZ_MATCH) goto error_index;
 	while (pos < (data->length - MIN_LZ_MATCH)) {
-		c = *mem;
+		c = *(data->in + pos);
 		data->byte[c][data->bytecnt[c]] = pos;
 		data->bytecnt[c]++;
 /*		DLOG("pos 0x%x, len 0x%x, byte 0x%x, cnt 0x%x\n",
 				pos, data->length, c,
 				data->bytecnt[c]); */
-		mem++;
 		pos++;
 		if (data->bytecnt[c] == MAX_LZ_BYTE_SCANS) break;
 	}
@@ -181,12 +179,10 @@ error_opos:
 /* Intercept a stream of literals and try byte plane transformation */
 static int lzjody_flush_literals(struct comp_data_t * const restrict data)
 {
-	unsigned char lit_in[LZJODY_BSIZE + 4];
-	unsigned char lit_out[LZJODY_BSIZE + 4];
+	static unsigned char lit_in[LZJODY_BSIZE];
+	static unsigned char lit_out[LZJODY_BSIZE + 4];
 	unsigned int i;
 	int err;
-
-	/* Initialize compression data structure */
 	struct comp_data_t d2;
 
 	/* For zero literals we'll just do nothing. */
@@ -593,21 +589,20 @@ extern int lzjody_compress(const unsigned char * const blk_in,
 	int err;
 
 	/* Initialize compression data structure */
-	struct comp_data_t comp_data;
-	struct comp_data_t * const restrict data = &comp_data;
+	struct comp_data_t data;
 
 	DLOG("Comp: blk len 0x%x\n", length);
 
-	comp_data.in = blk_in;
-	comp_data.out = blk_out;
-	comp_data.ipos = 0;
-	comp_data.opos = 2;
-	comp_data.literals = 0;
-	comp_data.literal_start = 0;
-	comp_data.length = length;
-	comp_data.options = options;
+	data.in = blk_in;
+	data.out = blk_out;
+	data.ipos = 0;
+	data.opos = 2;
+	data.literals = 0;
+	data.literal_start = 0;
+	data.length = length;
+	data.options = options;
 
-	if (options & O_NOPREFIX) comp_data.opos = 0;
+	if (options & O_NOPREFIX) data.opos = 0;
 
 	/* Perform sanity checks on data length */
 	if (length == 0) goto error_zero_length;
@@ -615,31 +610,31 @@ extern int lzjody_compress(const unsigned char * const blk_in,
 
 	/* Nothing under 3 bytes long will compress */
 	if (length < 3) {
-		data->literals = length;
+		data.literals = length;
 		goto compress_short;
 	}
 
 	/* Load arrays for match speedup */
-	err = index_bytes(data);
+	err = index_bytes(&data);
 	if (err < 0) return err;
 
 	/* Scan through entire block looking for compressible items */
-	err = compress_scan(data);
+	err = compress_scan(&data);
 	if (err < 0) return err;
 
 compress_short:
 	/* Flush any remaining literals */
-	err = lzjody_flush_literals(data);
+	err = lzjody_flush_literals(&data);
 	if (err < 0) return err;
 
 	if (!(options & O_NOPREFIX)) {
 		/* Write the total length to the data block unless asked not to */
-		*(unsigned char *)(data->out) = (unsigned char)(((data->opos - 2) & 0xff00) >> 8);
-		*(unsigned char *)(data->out + 1) = (unsigned char)(data->opos - 2);
+		*(unsigned char *)(data.out) = (unsigned char)(((data.opos - 2) & 0xff00) >> 8);
+		*(unsigned char *)(data.out + 1) = (unsigned char)(data.opos - 2);
 	}
 
-	DLOG("compressed length: %x\n", data->opos);
-	return data->opos;
+	DLOG("compressed length: %x\n", data.opos);
+	return data.opos;
 
 error_large_length:
 	fprintf(stderr, "liblzjody: error: block length %d larger than maximum of %d\n",
@@ -741,6 +736,7 @@ extern int lzjody_decompress(const unsigned char * const in,
 				DLOG("Byte plane transform len 0x%x done\n", bp_length);
 				ipos += length;
 				opos += bp_length;
+				if (opos > LZJODY_BSIZE) goto error_bp_length;
 				length = 0;
 				/* memcpy sucks, we can do it ourselves */
 				while(length < bp_length) {
@@ -768,6 +764,7 @@ extern int lzjody_decompress(const unsigned char * const in,
 				mem1 = out + offset;
 				mem2 = out + opos;
 				opos += length;
+				if (opos > LZJODY_BSIZE) goto error_lz_length;
 			       	while (length != 0) {
 					*mem2 = *mem1;
 					mem1++; mem2++;
@@ -781,6 +778,7 @@ extern int lzjody_decompress(const unsigned char * const in,
 				c = *(in + ipos);
 				ipos++;
 				DLOG("%04x:%04x: RLE run 0x%x\n", ipos, opos, length);
+				if (opos + length > LZJODY_BSIZE) goto error_rle_length;
 				while (length > 0) {
 					*(out + opos) = c;
 					opos++;
@@ -801,6 +799,7 @@ extern int lzjody_decompress(const unsigned char * const in,
 				}
 				ipos += control;
 				opos += control;
+				if (opos > LZJODY_BSIZE) goto error_lit_length;
 				break;
 
 			case P_SEQ32:
@@ -860,13 +859,32 @@ extern int lzjody_decompress(const unsigned char * const in,
 				break;
 
 			default:
-				fprintf(stderr, "liblzjody: error: invalid decompressor mode 0x%x at 0x%x\n", mode, ipos);
-				return -1;
+				goto error_mode;
 		}
 	}
 
+	if (opos > LZJODY_BSIZE) goto error_opos;
 	return opos;
 
+error_opos:
+	fprintf(stderr, "liblzjody: error: output pos %d higher than maximum %d)\n", opos, LZJODY_BSIZE);
+	return -1;
+error_bp_length:
+	fprintf(stderr, "liblzjody: error: byte plane length overflows output pos (%d > %d)\n",
+			opos, LZJODY_BSIZE);
+	return -1;
+error_rle_length:
+	fprintf(stderr, "liblzjody: error: RLE length overflows output pos (%d > %d)\n",
+			opos + length, LZJODY_BSIZE);
+	return -1;
+error_lit_length:
+	fprintf(stderr, "liblzjody: error: literal length overflows output pos (%d > %d)\n",
+			opos, LZJODY_BSIZE);
+	return -1;
+error_lz_length:
+	fprintf(stderr, "liblzjody: error: LZ length overflows output pos (%d > %d)\n",
+			opos, LZJODY_BSIZE);
+	return -1;
 error_lz_offset:
 	fprintf(stderr, "liblzjody: data error: LZ offset 0x%x >= output pos 0x%x)\n", offset, opos);
 	return -1;
@@ -876,6 +894,9 @@ error_seq:
 error_length:
 	fprintf(stderr, "liblzjody: data error: length 0x%x greater than maximum 0x%x @ 0x%x\n",
 			length, LZJODY_BSIZE, ipos - 1);
+	return -1;
+error_mode:
+	fprintf(stderr, "liblzjody: error: invalid decompressor mode 0x%x at 0x%x\n", mode, ipos);
 	return -1;
 }
 
