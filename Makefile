@@ -1,9 +1,9 @@
 CC=gcc
 AR=ar
-CFLAGS=-O3 -ftree-vectorize -fgcse-las -flto -ffat-lto-objects
+#CFLAGS=-O3 -ftree-vectorize -fgcse-las -flto -ffat-lto-objects
 # Try these if the compiler complains or you need to debug
 #CFLAGS=-O3 -g
-#CFLAGS=-Og -g3
+CFLAGS=-Og -g3
 BUILD_CFLAGS = -std=gnu99 -I. -D_FILE_OFFSET_BITS=64 -fstrict-aliasing -pipe
 BUILD_CFLAGS += -Wall -Wextra -Wcast-align -Wstrict-aliasing -pedantic -Wstrict-overflow -Wno-unused-parameter
 LDFLAGS=-L.
@@ -19,8 +19,8 @@ datarootdir=${prefix}/share
 datadir=${datarootdir}
 sysconfdir=${prefix}/etc
 
-# Use POSIX threads by default, but allow the user to override them
-ifndef NOTHREADS
+# Use POSIX threads if the user specifically requests it
+ifdef THREADED
 LDFLAGS += -lpthread
 BUILD_CFLAGS += -DTHREADED
 endif
