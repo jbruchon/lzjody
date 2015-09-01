@@ -197,6 +197,6 @@ can help fix the bugs without otherwise changing the behavior of the program.
 MISCELLANY
 ----------
 
-lzjody was initially called "lzjody" and the name was changed to avoid confusion
+lzjody was initially called "lzjb" and the name was changed to avoid confusion
 with an existing compression algorithm by the same name that is used in the
 ZFS filesystem.
