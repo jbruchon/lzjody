@@ -237,7 +237,7 @@ int main(int argc, char **argv)
 
 			/* Read the length of the compressed data */
 			length = *(blk + 1);
-			length |= (*blk << 8);
+			length |= ((*blk & 0x1f) << 8);
 			if (length > (LZJODY_BSIZE + 4)) goto error_blocksize_d_prefix;
 
 			i = fread(blk, 1, length, files.in);
