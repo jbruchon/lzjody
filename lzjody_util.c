@@ -31,18 +31,26 @@
 #include <pthread.h>
 pthread_mutex_t mtx = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t cond;	/* pthreads change condition */
-int thread_error;	/* nonzero if any thread fails */
+static int thread_error;	/* nonzero if any thread fails */
 #endif
 
-struct files_t file_vars;
-struct files_t * const files = &file_vars;
+/* Debugging stuff */
+#ifndef DLOG
+ #ifdef DEBUG
+  #define DLOG(...) fprintf(stderr, __VA_ARGS__)
+ #else
+  #define DLOG(...)
+ #endif
+#endif
+
+struct files_t files;
 
 #ifdef THREADED
 static void *compress_thread(void *arg)
 {
-	struct thread_info * const restrict thr = arg;
-	const unsigned char * restrict ipos = thr->blk;	/* Uncompressed input pointer */
-	unsigned char * restrict opos = thr->out;	/* Compressed output pointer */
+	struct thread_info * const thr = arg;
+	const unsigned char *ipos = thr->blk;	/* Uncompressed input pointer */
+	unsigned char *opos = thr->out;	/* Compressed output pointer */
 	int i;
 	int bsize = LZJODY_BSIZE;	/* Compressor block size */
 	int remain = thr->length;	/* Remaining input bytes */
@@ -71,36 +79,32 @@ int main(int argc, char **argv)
 	static unsigned char blk[LZJODY_BSIZE];
 	static unsigned char out[LZJODY_BSIZE + 4];
 	int i;
-	unsigned int j;
 	int length = 0;	/* Incoming data block length counter */
 	int blocknum = 0;	/* Current block number */
 	unsigned char options = 0;	/* Compressor options */
 #ifdef THREADED
 	struct thread_info *thr;
-	struct thread_info *cur;
-	uint32_t min_blk;	/* Minimum block number */
-	unsigned int min_thread;	/* Thread for min_blk */
-	int thread;	/* Temporary thread scan counter */
-	int open_thr;	/* Next open thread */
 	int nprocs = 1;		/* Number of processors */
-	char running = 0;	/* Number of threads running */
 	int eof = 0;	/* End of file? */
+	char running = 0;	/* Number of threads running */
 #endif /* THREADED */
 
 	if (argc < 2) goto usage;
-	files->in = stdin;
-	files->out = stdout;
+	files.in = stdin;
+	files.out = stdout;
 
 	if (!strncmp(argv[1], "-c", 2)) {
 #ifndef THREADED
 		/* Non-threaded compression */
-		while((length = fread(blk, 1, LZJODY_BSIZE, files->in))) {
-			if (ferror(files->in)) goto error_read;
+		/* fprintf(stderr, "blk %p, blkend %p, files %p\n",
+				blk, blk + LZJODY_BSIZE - 1, files); */
+		while((length = fread(blk, 1, LZJODY_BSIZE, files.in))) {
+			if (ferror(files.in)) goto error_read;
 			DLOG("--- Compressing block %d\n", blocknum);
 			i = lzjody_compress(blk, out, options, length);
 			if (i < 0) goto error_compression;
 			DLOG("c_size %d bytes\n", i);
-			i = fwrite(out, i, 1, files->out);
+			i = fwrite(out, i, 1, files.out);
 			if (!i) goto error_write;
 			blocknum++;
 		}
@@ -128,6 +132,12 @@ int main(int argc, char **argv)
 
 		thread_error = 0;
 		while (1) {
+			struct thread_info *cur;
+			uint32_t min_blk;	/* Minimum block number */
+			unsigned int min_thread;	/* Thread for min_blk */
+			int thread;	/* Temporary thread scan counter */
+			int open_thr;	/* Next open thread */
+
 			/* See if lowest block number is finished */
 			while (1) {
 				min_blk = 0xffffffff;
@@ -135,20 +145,28 @@ int main(int argc, char **argv)
 				/* Scan threads for smallest block number */
 				pthread_mutex_lock(&mtx);
 				for (thread = 0; thread < nprocs; thread++) {
+					unsigned int j;
+
+				fprintf(stderr, ":thr %p, thread %d\n",
+						thr, thread);
 					if (thread_error != 0) goto error_compression;
 					j = (thr + thread)->block;
 					if (j > 0 && j < min_blk) {
 						min_blk = j;
 						min_thread = thread;
+				fprintf(stderr, ":j%d:%d thr %p, cur %p, min_thread %d\n",
+						j, min_blk, thr, cur, min_thread);
 					}
 				}
 				pthread_mutex_unlock(&mtx);
 
 				cur = thr + min_thread;
+				fprintf(stderr, "thr %p, cur %p, min_thread %d\n",
+						thr, cur, min_thread);
 				if (cur->working == 0 && cur->length > 0) {
 					pthread_detach(cur->id);
 					/* flush finished block */
-					i = fwrite(cur->out, cur->o_length, 1, files->out);
+					i = fwrite(cur->out, cur->o_length, 1, files.out);
 					if (!i) goto error_write;
 					cur->block = 0;
 					cur->length = 0;
@@ -180,8 +198,8 @@ int main(int argc, char **argv)
 					}
 
 					/* Read next block */
-					length = fread(cur->blk, 1, (LZJODY_BSIZE * CHUNK), files->in);
-					if (ferror(files->in)) goto error_read;
+					length = fread(cur->blk, 1, (LZJODY_BSIZE * CHUNK), files.in);
+					if (ferror(files.in)) goto error_read;
 					if (length < (LZJODY_BSIZE * CHUNK)) eof = 1;
 					if (length > 0) {
 						blocknum++;
@@ -213,25 +231,25 @@ int main(int argc, char **argv)
 
 	/* Decompress */
 	if (!strncmp(argv[1], "-d", 2)) {
-		while(fread(blk, 1, 2, files->in)) {
+		while(fread(blk, 1, 2, files.in)) {
 			/* Get block-level decompression options */
 			options = *blk & 0xe0;
 
 			/* Read the length of the compressed data */
 			length = *(blk + 1);
 			length |= (*blk << 8);
-			if (length > (LZJODY_BSIZE + 8)) goto error_blocksize_d_prefix;
+			if (length > (LZJODY_BSIZE + 4)) goto error_blocksize_d_prefix;
 
-			i = fread(blk, 1, length, files->in);
-			if (ferror(files->in)) goto error_read;
+			i = fread(blk, 1, length, files.in);
+			if (ferror(files.in)) goto error_read;
 			if (i != length) goto error_shortread;
 
-			DLOG("--- Dempressing block %d\n", blocknum);
+			DLOG("--- Decompressing block %d\n", blocknum);
 			length = lzjody_decompress(blk, out, i, options);
 			if (length < 0) goto error_decompress;
 			if (length > LZJODY_BSIZE) goto error_blocksize_decomp;
 
-			i = fwrite(out, 1, length, files->out);
+			i = fwrite(out, 1, length, files.out);
 /*			DLOG("Wrote %d bytes\n", i); */
 
 			if (i != length) goto error_write;
@@ -256,7 +274,7 @@ error_shortread:
 	exit(EXIT_FAILURE);
 error_blocksize_d_prefix:
 	fprintf(stderr, "Error: decompressor prefix too large (%d > %d) \n",
-			length, (LZJODY_BSIZE + 8));
+			length, (LZJODY_BSIZE + 4));
 	exit(EXIT_FAILURE);
 error_blocksize_decomp:
 	fprintf(stderr, "Error: decompressor overflow (%d > %d) \n",
@@ -265,9 +283,11 @@ error_blocksize_decomp:
 error_decompress:
 	fprintf(stderr, "Error: cannot decompress block %d\n", blocknum);
 	exit(EXIT_FAILURE);
+#ifdef THREADED
 oom:
 	fprintf(stderr, "Error: out of memory\n");
 	exit(EXIT_FAILURE);
+#endif
 usage:
 	fprintf(stderr, "lzjody %s, a compression utility by Jody Bruchon (%s)\n",
 			LZJODY_UTIL_VER, LZJODY_UTIL_VERDATE);
@@ -275,4 +295,3 @@ usage:
 	fprintf(stderr, "\nlzjody -d   decompress stdin to stdout\n");
 	exit(EXIT_FAILURE);
 }
-
