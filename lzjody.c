@@ -696,7 +696,7 @@ compress_short:
 
 	if (!(options & O_NOPREFIX)) {
 		/* Write the total length to the data block unless asked not to */
-		*(unsigned char *)(data.out) = (unsigned char)(((data.opos - 2) & 0xff00) >> 8);
+		*(unsigned char *)(data.out) = (unsigned char)(((data.opos - 2) & 0x1f00) >> 8);
 		*(unsigned char *)(data.out + 1) = (unsigned char)(data.opos - 2);
 	}
 
