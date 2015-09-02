@@ -21,6 +21,10 @@
 #ifndef LZJODY_H
 #define LZJODY_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define LZJODY_VER "0.1"
 #define LZJODY_VERDATE "2014-12-29"
 
@@ -39,5 +43,9 @@ extern int lzjody_compress(const unsigned char * const, unsigned char * const,
 		const unsigned int, const unsigned int);
 extern int lzjody_decompress(const unsigned char * const, unsigned char * const,
 		const unsigned int, const unsigned int);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif	/* LZJODY_H */
