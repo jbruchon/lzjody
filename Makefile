@@ -1,6 +1,6 @@
 CC=gcc
 AR=ar
-#CFLAGS=-O3 -ftree-vectorize -fgcse-las -flto -ffat-lto-objects
+#CFLAGS=-O3 -ftree-vectorize -fgcse-las
 # Try these if the compiler complains or you need to debug
 #CFLAGS=-O3 -g
 CFLAGS=-Og -g3

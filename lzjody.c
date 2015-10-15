@@ -703,9 +703,21 @@ compress_short:
 	err = lzjody_flush_literals(&data);
 	if (err < 0) return err;
 
+	/* Write the total length to the data block unless asked not to */
 	if (!(options & O_NOPREFIX)) {
-		/* Write the total length to the data block unless asked not to */
-		*(unsigned char *)(data.out) = (unsigned char)(((data.opos - 2) & 0xff00) >> 8);
+/* This uncompressed block part isn't working yet */
+#if 0
+		if (data.opos >= length) {
+			/* Flag incompressible data for possible faster decompression */
+			*(unsigned char *)(data.out) =
+				(unsigned char)((((data.opos - 2) & 0x1f00) >> 8) | O_NOCOMPRESS);
+			DLOG("### Incompressible: %x -> %x\n",
+				(unsigned char)(((data.opos - 2) & 0x1f00) >> 8),
+				(unsigned char)(((data.opos - 2) & 0x1f00) >> 8) | O_NOCOMPRESS);
+		} else {
+#endif
+			*(unsigned char *)(data.out) = (unsigned char)(((data.opos - 2) & 0x1f00) >> 8);
+//		}
 		*(unsigned char *)(data.out + 1) = (unsigned char)(data.opos - 2);
 	}
 
