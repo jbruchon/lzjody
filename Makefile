@@ -29,7 +29,15 @@ ifdef DEBUG
 BUILD_CFLAGS += -DDEBUG -g
 endif
 
-all: lzjody lzjody.static test
+TARGETS = lzjody lzjody.static test
+
+# On MinGW (Windows) only build static versions
+ifeq ($(OS), Windows_NT)
+        COMPILER_OPTIONS += -D__USE_MINGW_ANSI_STDIO=1
+	TARGETS = lzjody.static test
+endif
+
+all: $(TARGETS)
 
 lzjody.static: liblzjody.a lzjody_util.o
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(BUILD_CFLAGS) -o lzjody.static lzjody_util.o liblzjody.a

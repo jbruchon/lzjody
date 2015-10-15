@@ -86,17 +86,22 @@ struct comp_data_t {
 	unsigned int literal_start;
 	unsigned int length;	/* Length of input data */
 	int options;	/* 0=exhaustive search, 1=stop at first match */
+};
+
+struct lz_index_t {
 	uint16_t byte[256][MAX_LZ_BYTE_SCANS];	/* Lists of locations of each byte value */
 	uint16_t bytecnt[256];	/* How many offsets exist per byte */
 };
 
-static inline int lzjody_find_lz(struct comp_data_t * const restrict data);
+static inline int lzjody_find_lz(struct comp_data_t * const restrict data,
+		const struct lz_index_t * const restrict idx);
 static inline int lzjody_find_rle(struct comp_data_t * const restrict data);
 static inline int lzjody_find_seq32(struct comp_data_t * const restrict data);
 static inline int lzjody_find_seq16(struct comp_data_t * const restrict data);
 static inline int lzjody_find_seq8(struct comp_data_t * const restrict data);
 
-static int compress_scan(struct comp_data_t * const restrict data)
+static int compress_scan(struct comp_data_t * const restrict data,
+		const struct lz_index_t * const restrict idx)
 {
 	int err;
 
@@ -120,7 +125,7 @@ static int compress_scan(struct comp_data_t * const restrict data)
 		if (err < 0) return err;
 		if (err > 0) continue;
 
-		err = lzjody_find_lz(data);
+		err = lzjody_find_lz(data, idx);
 		if (err < 0) return err;
 		if (err > 0) continue;
 
@@ -133,25 +138,26 @@ static int compress_scan(struct comp_data_t * const restrict data)
 }
 
 /* Build an array of byte values for faster LZ matching */
-static int index_bytes(struct comp_data_t * const restrict data)
+static int index_bytes(const struct comp_data_t * const restrict data,
+		struct lz_index_t * const restrict idx)
 {
 	unsigned int pos = 0;
 	unsigned char c;
 
 	/* Clear any existing index */
-	for (int i = 0; i < 256; i++ ) data->bytecnt[i] = 0;
+	for (int i = 0; i < 256; i++) idx->bytecnt[i] = 0;
 
 	/* Read each byte and add its offset to its list */
 	if (data->length < MIN_LZ_MATCH) goto error_index;
 	while (pos < (data->length - MIN_LZ_MATCH)) {
 		c = *(data->in + pos);
-		data->byte[c][data->bytecnt[c]] = pos;
-		data->bytecnt[c]++;
+		idx->byte[c][idx->bytecnt[c]] = pos;
+		idx->bytecnt[c]++;
 /*		DLOG("pos 0x%x, len 0x%x, byte 0x%x, cnt 0x%x\n",
 				pos, data->length, c,
-				data->bytecnt[c]); */
+				idx->bytecnt[c]); */
 		pos++;
-		if (data->bytecnt[c] == MAX_LZ_BYTE_SCANS) break;
+		if (idx->bytecnt[c] == MAX_LZ_BYTE_SCANS) break;
 	}
 	return 0;
 
@@ -233,7 +239,7 @@ static int lzjody_really_flush_literals(struct comp_data_t * const restrict data
 		i++;
 	}
 	/* Reset literal counter*/
-	DLOG("flushed; new opos: 0x%x\n", data->opos);
+	DLOG("flushed; new opos: 0x%x\n\n", data->opos);
 	data->literals = 0;
 	return 0;
 
@@ -250,10 +256,20 @@ static int lzjody_flush_literals(struct comp_data_t * const restrict data)
 	static unsigned char lit_out[LZJODY_BSIZE + 4];
 	unsigned int i;
 	int err;
-	struct comp_data_t d2;
+	static struct comp_data_t d2;
+	static struct lz_index_t idx;
 
 	/* For zero literals we'll just do nothing. */
 	if (data->literals == 0) return 0;
+
+	/* Handle blocking of recursive calls or very short literal runs */
+	if ((data->literals < MIN_PLANE_LENGTH)
+			|| (data->options & O_REALFLUSH)) {
+		err = lzjody_really_flush_literals(data);
+		if (err < 0) return err;
+		return 0;
+	}
+
 
 	d2.in = lit_in;
 	d2.out = lit_out;
@@ -267,15 +283,6 @@ static int lzjody_flush_literals(struct comp_data_t * const restrict data)
 
 	DLOG("flush_literals: 0x%x\n", data->literals);
 
-	/* Handle blocking of recursive calls or very short literal runs */
-	if ((data->literals < MIN_PLANE_LENGTH)
-			|| (data->options & O_REALFLUSH)) {
-		DLOG("bypass further compression\n");
-		err = lzjody_really_flush_literals(data);
-		if (err < 0) return err;
-		return 0;
-	}
-
 	/* Try to compress a literal run further */
 	DLOG("compress further: 0x%x @ 0x%x\n", data->literals, data->literal_start);
 	/* Make a transformed copy of the data */
@@ -284,11 +291,11 @@ static int lzjody_flush_literals(struct comp_data_t * const restrict data)
 	if (err < 0) return err;
 
 	/* Load arrays for match speedup */
-	err = index_bytes(&d2);
+	err = index_bytes(&d2, &idx);
 	if (err < 0) return err;
 
 	/* Try to compress the data again */
-	err = compress_scan(&d2);
+	err = compress_scan(&d2, &idx);
 	if (err < 0) return err;
 	err = lzjody_really_flush_literals(&d2);
 	if (err < 0) return err;
@@ -320,7 +327,8 @@ static int lzjody_flush_literals(struct comp_data_t * const restrict data)
 }
 
 /* Find best LZ data match for current input position */
-static inline int lzjody_find_lz(struct comp_data_t * const restrict data)
+static inline int lzjody_find_lz(struct comp_data_t * const restrict data,
+		const struct lz_index_t * const restrict idx)
 {
 	unsigned int scan = 0;
 	const unsigned char *m0, *m1, *m2;	/* pointers for matches */
@@ -341,7 +349,7 @@ static inline int lzjody_find_lz(struct comp_data_t * const restrict data)
 	if (data->ipos >= (data->length - min_lz_match)) return 0;
 
 	m0 = data->in + data->ipos;
-	total_scans = data->bytecnt[*m0];
+	total_scans = idx->bytecnt[*m0];
 
 	/* If the byte value does not exist anywhere, give up */
 	if (!total_scans) return 0;
@@ -353,7 +361,7 @@ static inline int lzjody_find_lz(struct comp_data_t * const restrict data)
 		/* Get offset of next byte */
 		length = 0;
 		m1 = m0;
-		offset = data->byte[*m1][scan];
+		offset = idx->byte[*m1][scan];
 
 		/* Don't use offsets higher than input position */
 		if (offset >= data->ipos) {
@@ -656,7 +664,8 @@ extern int lzjody_compress(const unsigned char * const blk_in,
 	int err;
 
 	/* Initialize compression data structure */
-	struct comp_data_t data;
+	static struct comp_data_t data;
+	static struct lz_index_t idx;
 
 	DLOG("Comp: blk len 0x%x\n", length);
 
@@ -682,11 +691,11 @@ extern int lzjody_compress(const unsigned char * const blk_in,
 	}
 
 	/* Load arrays for match speedup */
-	err = index_bytes(&data);
+	err = index_bytes(&data, &idx);
 	if (err < 0) return err;
 
 	/* Scan through entire block looking for compressible items */
-	err = compress_scan(&data);
+	err = compress_scan(&data, &idx);
 	if (err < 0) return err;
 
 compress_short:
@@ -700,7 +709,7 @@ compress_short:
 		*(unsigned char *)(data.out + 1) = (unsigned char)(data.opos - 2);
 	}
 
-	DLOG("compressed length: %x\n", data.opos);
+	DLOG("compressed length: %x\n\n", data.opos);
 	return data.opos;
 
 error_large_length:
