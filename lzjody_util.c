@@ -27,6 +27,16 @@
 #include "lzjody.h"
 #include "lzjody_util.h"
 
+/* Detect Windows and modify as needed */
+#if defined _WIN32 || defined __CYGWIN__
+ #define ON_WINDOWS 1
+ #ifndef WIN32_LEAN_AND_MEAN
+  #define WIN32_LEAN_AND_MEAN
+ #endif
+ #include <windows.h>
+ #include <io.h>
+#endif
+
 #ifdef THREADED
 #include <pthread.h>
 pthread_mutex_t mtx = PTHREAD_MUTEX_INITIALIZER;
@@ -80,6 +90,7 @@ int main(int argc, char **argv)
 	static unsigned char out[LZJODY_BSIZE + 4];
 	int i;
 	int length = 0;	/* Incoming data block length counter */
+	int c_length;   /* Compressed block length temp variable */
 	int blocknum = 0;	/* Current block number */
 	unsigned char options = 0;	/* Compressor options */
 #ifdef THREADED
@@ -90,6 +101,13 @@ int main(int argc, char **argv)
 #endif /* THREADED */
 
 	if (argc < 2) goto usage;
+
+	/* Windows requires that data streams be put into binary mode */
+#ifdef ON_WINDOWS
+	setmode(STDIN_FILENO, _O_BINARY);
+	setmode(STDOUT_FILENO, _O_BINARY);
+#endif /* ON_WINDOWS */
+
 	files.in = stdin;
 	files.out = stdout;
 
@@ -100,7 +118,7 @@ int main(int argc, char **argv)
 				blk, blk + LZJODY_BSIZE - 1, files); */
 		while((length = fread(blk, 1, LZJODY_BSIZE, files.in))) {
 			if (ferror(files.in)) goto error_read;
-			DLOG("--- Compressing block %d\n", blocknum);
+			DLOG("\n--- Compressing block %d\n", blocknum);
 			i = lzjody_compress(blk, out, options, length);
 			if (i < 0) goto error_compression;
 			DLOG("c_size %d bytes\n", i);
@@ -111,14 +129,14 @@ int main(int argc, char **argv)
 
 #else /* Using POSIX threads */
 
-# ifdef _SC_NPROCESSORS_ONLN
+ #ifdef _SC_NPROCESSORS_ONLN
 		/* Get number of online processors for pthreads */
 		nprocs = (int)sysconf(_SC_NPROCESSORS_ONLN);
 		if (nprocs < 1) {
 			fprintf(stderr, "warning: system returned bad number of processors: %d\n", nprocs);
 			nprocs = 1;
 		}
-# endif /* _SC_NPROCESSORS_ONLN */
+ #endif /* _SC_NPROCESSORS_ONLN */
 		/* Run two threads per processor */
 		nprocs <<= 1;
 		fprintf(stderr, "lzjody: compressing with %d worker threads\n", nprocs);
@@ -233,7 +251,7 @@ int main(int argc, char **argv)
 	if (!strncmp(argv[1], "-d", 2)) {
 		while(fread(blk, 1, 2, files.in)) {
 			/* Get block-level decompression options */
-			options = *blk & 0xe0;
+			options = *blk & 0xc0;
 
 			/* Read the length of the compressed data */
 			length = *(blk + 1);
@@ -244,15 +262,27 @@ int main(int argc, char **argv)
 			if (ferror(files.in)) goto error_read;
 			if (i != length) goto error_shortread;
 
-			DLOG("--- Decompressing block %d\n", blocknum);
-			length = lzjody_decompress(blk, out, i, options);
-			if (length < 0) goto error_decompress;
-			if (length > LZJODY_BSIZE) goto error_blocksize_decomp;
+			if (options & O_NOCOMPRESS) {
+				c_length = *(blk + 1);
+				c_length |= ((*blk & 0x1f) << 8);
+				DLOG("--- Writing uncompressed block %d (%d bytes)\n", blocknum, c_length);
+				if (c_length > LZJODY_BSIZE) goto error_unc_length;
+				i = fwrite((blk + 2), 1, c_length, files.out);
+				if (i != c_length) {
+					length = c_length;
+					goto error_write;
+				}
+			} else {
+				DLOG("--- Decompressing block %d\n", blocknum);
+				length = lzjody_decompress(blk, out, i, options);
+				if (length < 0) goto error_decompress;
+				if (length > LZJODY_BSIZE) goto error_blocksize_decomp;
+				i = fwrite(out, 1, length, files.out);
+				if (i != length) goto error_write;
+ /*			     DLOG("Wrote %d bytes\n", i); */
+			}
 
-			i = fwrite(out, 1, length, files.out);
-/*			DLOG("Wrote %d bytes\n", i); */
 
-			if (i != length) goto error_write;
 			blocknum++;
 		}
 	}
@@ -270,14 +300,19 @@ error_write:
 			i, length);
 	exit(EXIT_FAILURE);
 error_shortread:
-	fprintf(stderr, "Error: short read: %d < %d\n", i, length);
+	fprintf(stderr, "Error: short read: %d < %d (eof %d, error %d)\n",
+			i, length, feof(files.in), ferror(files.in));
+	exit(EXIT_FAILURE);
+error_unc_length:
+	fprintf(stderr, "Error: uncompressed length too large (%d > %d)\n",
+			c_length, LZJODY_BSIZE);
 	exit(EXIT_FAILURE);
 error_blocksize_d_prefix:
-	fprintf(stderr, "Error: decompressor prefix too large (%d > %d) \n",
+	fprintf(stderr, "Error: decompressor prefix too large (%d > %d)\n",
 			length, (LZJODY_BSIZE + 4));
 	exit(EXIT_FAILURE);
 error_blocksize_decomp:
-	fprintf(stderr, "Error: decompressor overflow (%d > %d) \n",
+	fprintf(stderr, "Error: decompressor overflow (%d > %d)\n",
 			length, LZJODY_BSIZE);
 	exit(EXIT_FAILURE);
 error_decompress:

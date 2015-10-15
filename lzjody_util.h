@@ -46,6 +46,7 @@ struct files_t {
 /* Number of LZJODY_BSIZE blocks to process per thread */
 #define CHUNK 1024
 
+#ifdef THREADED
 /* Per-thread working state */
 struct thread_info {
 	unsigned char blk[LZJODY_BSIZE * CHUNK];	/* Thread input blocks */
@@ -57,5 +58,6 @@ struct thread_info {
 	int o_length;	/* Output length */
 	int working;	/* Is thread working (1) or idle (0)? */
 };
+#endif /* THREADED */
 
 #endif	/* LZJODY_UTIL_H */
