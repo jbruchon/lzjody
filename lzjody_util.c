@@ -150,7 +150,7 @@ int main(int argc, char **argv)
 
 		thread_error = 0;
 		while (1) {
-			struct thread_info *cur;
+			struct thread_info *cur = NULL;
 			uint32_t min_blk;	/* Minimum block number */
 			unsigned int min_thread;	/* Thread for min_blk */
 			int thread;	/* Temporary thread scan counter */
@@ -166,21 +166,21 @@ int main(int argc, char **argv)
 					unsigned int j;
 
 				fprintf(stderr, ":thr %p, thread %d\n",
-						thr, thread);
+						(void *)thr, thread);
 					if (thread_error != 0) goto error_compression;
 					j = (thr + thread)->block;
 					if (j > 0 && j < min_blk) {
 						min_blk = j;
 						min_thread = thread;
 				fprintf(stderr, ":j%d:%d thr %p, cur %p, min_thread %d\n",
-						j, min_blk, thr, cur, min_thread);
+						j, min_blk, (void *)thr, (void *)cur, min_thread);
 					}
 				}
 				pthread_mutex_unlock(&mtx);
 
 				cur = thr + min_thread;
 				fprintf(stderr, "thr %p, cur %p, min_thread %d\n",
-						thr, cur, min_thread);
+						(void *)thr, (void *)cur, min_thread);
 				if (cur->working == 0 && cur->length > 0) {
 					pthread_detach(cur->id);
 					/* flush finished block */
