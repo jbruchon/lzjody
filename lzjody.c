@@ -32,26 +32,42 @@
  #endif
 #endif
 
-/* Top 3 bits of a control byte */
-#define P_SHORT	0x80	/* Compact control byte form */
-#define P_LZ	0x60	/* LZ (dictionary) compression */
-#define P_RLE	0x40	/* RLE compression */
-#define P_LIT	0x20	/* Literal values */
-#define P_LZL	0x10	/* LZ match flag: size > 255 */
-#define P_EXT	0x00	/* Extended algorithms (ignore 0x10 and P_SHORT) */
-#define P_PLANE 0x04	/* Byte plane transform */
-#define P_SEQ32	0x03	/* Sequential 32-bit values */
-#define P_SEQ16	0x02	/* Sequential 16-bit values */
-#define P_SEQ8	0x01	/* Sequential 8-bit values */
+/* Top 3 bits of the control byte */
+#define C_RES	0x00	/* Reserved for future expansion */
+#define C_LZ	0x20	/* LZ (dictionary) compression */
+#define C_RLE	0x40	/* RLE compression */
+#define C_PLANE 0x60	/* Byte plane transform */
+#define C_SEQ32	0x80	/* Sequential 32-bit values */
+#define C_SEQ16	0xa0	/* Sequential 16-bit values */
+#define C_SEQ8	0xc0	/* Sequential 8-bit values */
+#define C_LIT	0xe0	/* Literal values */
 
-/* Control bits masking value */
-#define P_MASK	0x60	/* LZ, RLE, literal (no short) */
-#define P_XMASK 0x0f	/* Extended command */
-#define P_SMASK 0x03	/* Sequence compression commands */
+/* Data chunk size specifiers */
+#define S_27BIT	0x18	/* One byte (27-bit size) */
+#define S_19BIT	0x10	/* One byte (19-bit size) */
+#define S_11BIT	0x08	/* One byte (11-bit size) */
+#define S_3BIT	0x00	/* Compact control + 3-bit size */
 
-/* Maximum length of a short element */
-#define P_SHORT_MAX 0x0f
-#define P_SHORT_XMAX 0xff
+/* Masks for portions of the control byte */
+#define M_OP	0xE0	/* Operation specifier */
+#define M_SIZE	0x18	/* Size specifier */
+#define M_TOP	0x07	/* Top 3 bits of size */
+
+/* LZ control byte size specifiers */
+#define O_26BIT	0xC0	/* 26-bit offset */
+#define O_18BIT	0x80	/* 18-bit offset */
+#define O_10BIT	0x40	/* 10-bit offset */
+#define O_2BIT	0x00	/*  2-bit offset */
+#define L_26BIT	0x30	/* 26-bit length */
+#define L_18BIT	0x20	/* 18-bit length */
+#define L_10BIT	0x10	/* 10-bit length */
+#define L_2BIT	0x00	/*  2-bit length */
+
+/* LZ control byte masks */
+#define M_OSIZE		0xC0	/* Offset size specifier */
+#define M_LSIZE		0x30	/* Length size specifier */
+#define M_OFFSET	0x0C	/* Offset top 2 bits */
+#define M_LENGTH	0x03	/* Length top 2 bits */
 
 /* Minimum sizes for compression
  * These sizes are roughly calculated as follows:
@@ -64,7 +80,7 @@
  * algorithms to expand data and fail in some cases!
  */
 #define MIN_LZ_MATCH 3
-#define MAX_LZ_MATCH 4095
+#define MAX_LZ_MATCH 2^23
 #define MIN_RLE_LENGTH 3
 /* Sequence lengths are not byte counts, they are word counts! */
 #define MIN_SEQ32_LENGTH 2
@@ -80,11 +96,11 @@
 struct comp_data_t {
 	const unsigned char *in;
 	unsigned char *out;
-	unsigned int ipos;
-	unsigned int opos;
-	unsigned int literals;
-	unsigned int literal_start;
-	unsigned int length;	/* Length of input data */
+	uint32_t ipos;
+	uint32_t opos;
+	uint32_t literals;
+	uint32_t literal_start;
+	uint32_t length;	/* Length of input data */
 	int options;	/* 0=exhaustive search, 1=stop at first match */
 };
 
@@ -170,9 +186,8 @@ error_index:
  * type is the P_xxx value that determines the type of the control byte */
 static int lzjody_write_control(struct comp_data_t * const restrict data,
 		const unsigned char type,
-		const uint16_t value)
+		const uint32_t value)
 {
-	if (value > 0x1000) goto error_value_too_large;
 	DLOG("control: (i 0x%x, o 0x%x) t 0x%x, val 0x%x: ",
 			data->ipos, data->opos, type, value);
 	/* Extended control bytes */
@@ -214,10 +229,6 @@ static int lzjody_write_control(struct comp_data_t * const restrict data,
 		DLOG("t+v 0x%x\n", data->opos - 1);
 	}
 	return 0;
-
-error_value_too_large:
-	fprintf(stderr, "error: lzjody_write_control: value 0x%x > 0x1000\n", value);
-	return -1;
 }
 
 /* Write out all pending literals without further processing */
@@ -228,7 +239,7 @@ static int lzjody_really_flush_literals(struct comp_data_t * const restrict data
 
 	if (data->literals == 0) return 0;
 	DLOG("really_flush_literals: 0x%x (opos 0x%x)\n", data->literals, data->opos);
-	if ((data->opos + data->literals) > (LZJODY_BSIZE + 4)) goto error_opos;
+	if ((data->opos + data->literals) > data->length) goto error_opos;
 	/* First write the control byte... */
 	err = lzjody_write_control(data, P_LIT, data->literals);
 	if (err < 0) return err;
@@ -245,15 +256,16 @@ static int lzjody_really_flush_literals(struct comp_data_t * const restrict data
 
 error_opos:
 	fprintf(stderr, "error: final output position will overflow: 0x%x > 0x%x\n",
-			data->opos + data->literals, LZJODY_BSIZE + 4);
+			data->opos + data->literals, data->length);
 	return -1;
 }
 
 /* Intercept a stream of literals and try byte plane transformation */
 static int lzjody_flush_literals(struct comp_data_t * const restrict data)
 {
-	static unsigned char lit_in[LZJODY_BSIZE];
-	static unsigned char lit_out[LZJODY_BSIZE + 4];
+	static unsigned char *lit_in = NULL;
+	static unsigned char *lit_out = NULL;
+	static int lit_alloc = 0;
 	unsigned int i;
 	int err;
 	static struct comp_data_t d2;
@@ -270,6 +282,23 @@ static int lzjody_flush_literals(struct comp_data_t * const restrict data)
 		return 0;
 	}
 
+	/* On the first invocation, allocate a reasonably large default work area */
+	if (!lit_alloc) {
+		lit_alloc = 4096;
+		lit_in = (unsigned char *)malloc(sizeof(unsigned char) * lit_alloc);
+		lit_out = (unsigned char *)malloc(sizeof(unsigned char) * lit_alloc);
+		if (!lit_in || !lit_out) goto oom;
+	}
+
+	/* Make sure our current working allocation is big enough */
+	if (data->literals > lit_alloc) {
+		if (lit_in != NULL) free(lit_in);
+		if (lit_out != NULL) free(lit_out);
+		lit_alloc = data->literals;
+		lit_in = (unsigned char *)malloc(sizeof(unsigned char) * lit_alloc);
+		lit_out = (unsigned char *)malloc(sizeof(unsigned char) * lit_alloc);
+		if (!lit_in || !lit_out) goto oom;
+	}
 
 	d2.in = lit_in;
 	d2.out = lit_out;
@@ -324,6 +353,10 @@ static int lzjody_flush_literals(struct comp_data_t * const restrict data)
 	/* Reset literal counter*/
 	data->literals = 0;
 	return 0;
+
+oom:
+	fprintf(stderr, "Out of memory\n");
+	exit(EXIT_FAILURE);
 }
 
 /* Find best LZ data match for current input position */
