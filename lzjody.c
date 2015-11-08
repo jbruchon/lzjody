@@ -32,7 +32,26 @@
  #endif
 #endif
 
-/* Top 3 bits of the control byte */
+/* Complete data block control byte(s) layout
+ *
+ * 76543210 [0-3b] [76 54 32 10] [0-3b] [0-3b] [compressed data]
+ * ||||||||   |     || || || ||    |      |
+ * ||||||||   |     || || || ++-----------+-- LZ length (2-26 bits)
+ * ||||||||   |     || || ||       |
+ * ||||||||   |     || || ++-------+-- LZ offset (2-26 bits)
+ * ||||||||   |     || ||
+ * ||||||||   |     || ++-- LZ length additional byte count
+ * ||||||||   |     ||
+ * ||||||||   |     ++-- LZ offset additional byte count
+ * ||||||||   |
+ * |||||+++---+-- Up to 27 bits of size specification
+ * |||||
+ * |||++-- How many additional size specification bytes follow
+ * |||
+ * +++-- Compression type specification
+ */
+
+/* Type of compression used for this data block */
 #define C_RES	0x00	/* Reserved for future expansion */
 #define C_LZ	0x20	/* LZ (dictionary) compression */
 #define C_RLE	0x40	/* RLE compression */
@@ -43,9 +62,9 @@
 #define C_LIT	0xe0	/* Literal values */
 
 /* Data chunk size specifiers */
-#define S_27BIT	0x18	/* One byte (27-bit size) */
-#define S_19BIT	0x10	/* One byte (19-bit size) */
-#define S_11BIT	0x08	/* One byte (11-bit size) */
+#define S_27BIT	0x18	/* 3-byte (27-bit size) */
+#define S_19BIT	0x10	/* 2-byte (19-bit size) */
+#define S_11BIT	0x08	/* 1-byte (11-bit size) */
 #define S_3BIT	0x00	/* Compact control + 3-bit size */
 
 /* Masks for portions of the control byte */
@@ -80,7 +99,7 @@
  * algorithms to expand data and fail in some cases!
  */
 #define MIN_LZ_MATCH 3
-#define MAX_LZ_MATCH 2^23
+#define MAX_LZ_MATCH 2^26
 #define MIN_RLE_LENGTH 3
 /* Sequence lengths are not byte counts, they are word counts! */
 #define MIN_SEQ32_LENGTH 2
