@@ -40,6 +40,7 @@
  * size/offset bits are the most significant bits.)
  *
  *                 |-------- LZ only --------|
+ *                 |                         |
  * 76543210 [0-3b] [76 54 32 10] [0-3b] [0-3b] [compressed data]
  * ||||||||   |     || || || ||    |      |
  * ||||||||   |     || || || ++-----------+-- LZ length (2-26 bits)
@@ -189,22 +190,22 @@ static int compress_scan(struct comp_data_t * const restrict data,
 		DLOG("[c_scan] ipos: 0x%x, opos: 0x%x\n", data->ipos, data->opos);
 
 		err = lzjody_find_rle(data);
-		if (err < 0) return err;
 		if (err > 0) continue;
+		if (err < 0) return err;
 
 		err = lzjody_find_seq8(data);
-		if (err < 0) return err;
 		if (err > 0) continue;
+		if (err < 0) return err;
 		err = lzjody_find_seq16(data);
-		if (err < 0) return err;
 		if (err > 0) continue;
+		if (err < 0) return err;
 		err = lzjody_find_seq32(data);
-		if (err < 0) return err;
 		if (err > 0) continue;
+		if (err < 0) return err;
 
 		err = lzjody_find_lz(data, idx);
-		if (err < 0) return err;
 		if (err > 0) continue;
+		if (err < 0) return err;
 
 		/* Nothing compressed; add to literal bytes */
 		if (data->literals == 0) data->literal_start = data->ipos;
