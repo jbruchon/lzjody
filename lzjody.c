@@ -136,7 +136,7 @@ enum control_type {
 
 /* Extract the size/length/offset value from control bytes */
 static inline uint32_t get_control_index(const unsigned char * restrict block,
-		const enum control_type type)
+		const enum control_type type, unsigned int *skipbytes)
 {
 	uint32_t value;
 	uint_fast8_t bytes;
@@ -162,6 +162,8 @@ static inline uint32_t get_control_index(const unsigned char * restrict block,
 			break;
 	}
 
+	/* Tell caller how many control bytes there are */
+	*skipbytes = bytes + 1;
 	/* Add in any extension bytes */
 	while (bytes > 0) {
 		value <<= 8;
@@ -780,19 +782,7 @@ compress_short:
 
 	/* Write the total length to the data block unless asked not to */
 	if (!(options & O_NOPREFIX)) {
-/* This uncompressed block part isn't working yet */
-#if 0
-		if (data.opos >= length) {
-			/* Flag incompressible data for possible faster decompression */
-			*(unsigned char *)(data.out) =
-				(unsigned char)((((data.opos - 2) & 0x1f00) >> 8) | O_NOCOMPRESS);
-			DLOG("### Incompressible: %x -> %x\n",
-				(unsigned char)(((data.opos - 2) & 0x1f00) >> 8),
-				(unsigned char)(((data.opos - 2) & 0x1f00) >> 8) | O_NOCOMPRESS);
-		} else {
-#endif
-			*(unsigned char *)(data.out) = (unsigned char)(((data.opos - 2) & 0x1f00) >> 8);
-//		}
+		*(unsigned char *)(data.out) = (unsigned char)(((data.opos - 2) & 0x1f00) >> 8);
 		*(unsigned char *)(data.out + 1) = (unsigned char)(data.opos - 2);
 	}
 
@@ -845,9 +835,10 @@ extern int lzjody_decompress(const unsigned char * const in,
 		c = *(in + ipos);
 		DLOG("Command 0x%x\n", c);
 		mode = c & M_OP;
+		/* Read length from control byte(s) and then skip them */
 		ctrl_type = STANDARD;
-		length = get_control_index(in + ipos, ctrl_type);
-		ipos++;
+		length = get_control_index(in + ipos, ctrl_type, &control);
+		ipos += control;
 
 		/* Based on the command, select a decompressor */
 		switch (mode) {
@@ -873,7 +864,7 @@ extern int lzjody_decompress(const unsigned char * const in,
 				break;
 			case C_LZ:
 				/* LZ (dictionary-based) compression */
-				offset = control & 0xfff; //FIXME
+				offset = 0xfff; //FIXME
 				length = *(in + ipos);
 				ipos++;
 				DLOG("%04x:%04x: LZ block (%x:%x)\n",
