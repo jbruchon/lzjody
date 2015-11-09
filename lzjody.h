@@ -29,7 +29,7 @@ extern "C" {
 #define LZJODY_VERDATE "2015-10-28"
 
 /* Maximum amount of data the algorithm can process at a time */
-#define LZJODY_MAX_BSIZE 2^27
+#define LZJODY_MAX_BSIZE 0x08000000
 
 /* Options for the compressor */
 #define O_FAST_LZ 0x01	/* Stop at first LZ match (faster but not recommended) */

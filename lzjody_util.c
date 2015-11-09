@@ -62,11 +62,11 @@ static void *compress_thread(void *arg)
 	const unsigned char *ipos = thr->blk;	/* Uncompressed input pointer */
 	unsigned char *opos = thr->out;	/* Compressed output pointer */
 	int i;
-	int bsize = LZJODY_BSIZE;	/* Compressor block size */
+	int bsize = LZJODY_MAX_BSIZE;	/* Compressor block size */
 	int remain = thr->length;	/* Remaining input bytes */
 
 	while (remain) {
-		if (remain < LZJODY_BSIZE) bsize = remain;
+		if (remain < LZJODY_MAX_BSIZE) bsize = remain;
 		i = lzjody_compress(ipos, opos, thr->options, bsize);
 		if (i < 0) {
 			thread_error = 1;
@@ -86,8 +86,8 @@ static void *compress_thread(void *arg)
 
 int main(int argc, char **argv)
 {
-	static unsigned char blk[LZJODY_BSIZE];
-	static unsigned char out[LZJODY_BSIZE + 4];
+	static unsigned char blk[LZJODY_MAX_BSIZE];
+	static unsigned char out[LZJODY_MAX_BSIZE + 4];
 	int i;
 	int length = 0;	/* Incoming data block length counter */
 	int c_length;   /* Compressed block length temp variable */
@@ -115,8 +115,8 @@ int main(int argc, char **argv)
 #ifndef THREADED
 		/* Non-threaded compression */
 		/* fprintf(stderr, "blk %p, blkend %p, files %p\n",
-				blk, blk + LZJODY_BSIZE - 1, files); */
-		while((length = fread(blk, 1, LZJODY_BSIZE, files.in))) {
+				blk, blk + LZJODY_MAX_BSIZE - 1, files); */
+		while((length = fread(blk, 1, LZJODY_MAX_BSIZE, files.in))) {
 			if (ferror(files.in)) goto error_read;
 			DLOG("\n--- Compressing block %d\n", blocknum);
 			i = lzjody_compress(blk, out, options, length);
@@ -216,9 +216,9 @@ int main(int argc, char **argv)
 					}
 
 					/* Read next block */
-					length = fread(cur->blk, 1, (LZJODY_BSIZE * CHUNK), files.in);
+					length = fread(cur->blk, 1, (LZJODY_MAX_BSIZE * CHUNK), files.in);
 					if (ferror(files.in)) goto error_read;
-					if (length < (LZJODY_BSIZE * CHUNK)) eof = 1;
+					if (length < (LZJODY_MAX_BSIZE * CHUNK)) eof = 1;
 					if (length > 0) {
 						blocknum++;
 
@@ -256,7 +256,7 @@ int main(int argc, char **argv)
 			/* Read the length of the compressed data */
 			length = *(blk + 1);
 			length |= ((*blk & 0x1f) << 8);
-			if (length > (LZJODY_BSIZE + 4)) goto error_blocksize_d_prefix;
+			if (length > (LZJODY_MAX_BSIZE + 4)) goto error_blocksize_d_prefix;
 
 			i = fread(blk, 1, length, files.in);
 			if (ferror(files.in)) goto error_read;
@@ -266,7 +266,7 @@ int main(int argc, char **argv)
 				c_length = *(blk + 1);
 				c_length |= ((*blk & 0x1f) << 8);
 				DLOG("--- Writing uncompressed block %d (%d bytes)\n", blocknum, c_length);
-				if (c_length > LZJODY_BSIZE) goto error_unc_length;
+				if (c_length > LZJODY_MAX_BSIZE) goto error_unc_length;
 				i = fwrite((blk + 2), 1, c_length, files.out);
 				if (i != c_length) {
 					length = c_length;
@@ -276,7 +276,7 @@ int main(int argc, char **argv)
 				DLOG("--- Decompressing block %d\n", blocknum);
 				length = lzjody_decompress(blk, out, i, options);
 				if (length < 0) goto error_decompress;
-				if (length > LZJODY_BSIZE) goto error_blocksize_decomp;
+				if (length > LZJODY_MAX_BSIZE) goto error_blocksize_decomp;
 				i = fwrite(out, 1, length, files.out);
 				if (i != length) goto error_write;
  /*			     DLOG("Wrote %d bytes\n", i); */
@@ -305,15 +305,15 @@ error_shortread:
 	exit(EXIT_FAILURE);
 error_unc_length:
 	fprintf(stderr, "Error: uncompressed length too large (%d > %d)\n",
-			c_length, LZJODY_BSIZE);
+			c_length, LZJODY_MAX_BSIZE);
 	exit(EXIT_FAILURE);
 error_blocksize_d_prefix:
 	fprintf(stderr, "Error: decompressor prefix too large (%d > %d)\n",
-			length, (LZJODY_BSIZE + 4));
+			length, (LZJODY_MAX_BSIZE + 4));
 	exit(EXIT_FAILURE);
 error_blocksize_decomp:
 	fprintf(stderr, "Error: decompressor overflow (%d > %d)\n",
-			length, LZJODY_BSIZE);
+			length, LZJODY_MAX_BSIZE);
 	exit(EXIT_FAILURE);
 error_decompress:
 	fprintf(stderr, "Error: cannot decompress block %d\n", blocknum);

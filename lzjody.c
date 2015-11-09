@@ -88,7 +88,6 @@
  * WARNING: Changing these values too low will cause the compression
  * algorithms to expand data and fail in some cases!
  */
-#define MAX_BSIZE 0x80000000
 #define MIN_LZ_MATCH 3
 #define MAX_LZ_MATCH 0x40000000
 #define MIN_RLE_LENGTH 3
@@ -259,7 +258,7 @@ static int lzjody_write_control(struct comp_data_t * const data,
 			data->ipos, data->opos, type, length);
 
 	/* Don't accept lengths we can't handle */
-	if (length > MAX_BSIZE) goto error_length;
+	if (length > LZJODY_MAX_BSIZE) goto error_length;
 	/* Lengths start at zero instead of one */
 	length--;
 
@@ -307,7 +306,7 @@ static int lzjody_really_flush_literals(struct comp_data_t * const restrict data
 	DLOG("really_flush_literals: 0x%x (opos 0x%x)\n", data->literals, data->opos);
 	if ((data->opos + data->literals) > data->length) goto error_opos;
 	/* First write the control byte... */
-	err = lzjody_write_control(data, P_LIT, data->literals);
+	err = lzjody_write_control(data, C_LIT, data->literals);
 	if (err < 0) return err;
 	/* ...then the literal bytes. */
 	while (i < data->literals) {
@@ -467,7 +466,7 @@ static inline int lzjody_find_lz(struct comp_data_t * const restrict data,
 
 		remain = data->length - data->ipos;
 		/* Handle underflow */
-		if (remain > MAX_BSIZE) goto err_remain_underflow;
+		if (remain > LZJODY_MAX_BSIZE) goto err_remain_underflow;
 
 /*		DLOG("LZ remain 0x%x at offset 0x%x ipos 0x%x\n", remain, offset, data->ipos); */
 
@@ -601,20 +600,17 @@ static inline int lzjody_find_rle(struct comp_data_t * const restrict data)
 {
 	const unsigned char c = *(data->in + data->ipos);
 	unsigned int length = 0;
-	unsigned int big_literals = 0;
 	int err;
 
-	/* If literal count > short form constraints, avoid data expansion */
-	if (data->literals > P_SHORT_MAX) big_literals = 1;
 	while (((length + data->ipos) < data->length) && (*(data->in + data->ipos + length) == c)) {
 		length++;
 	}
-	if (length >= (MIN_RLE_LENGTH + big_literals)) {
+	if (length >= MIN_RLE_LENGTH) {
 		DLOG("RLE: 0x%02x of 0x%02x at i %x, o %x\n",
 				length, c, data->ipos, data->opos);
 		err = lzjody_flush_literals(data);
 		if (err < 0) return err;
-		err = lzjody_write_control(data, P_RLE, length);
+		err = lzjody_write_control(data, C_RLE, length);
 		if (err < 0) return err;
 		/* Write repeated byte */
 		*(data->out + data->opos) = c;
@@ -633,11 +629,7 @@ static inline int lzjody_find_seq32(struct comp_data_t * const restrict data)
 	uint32_t *m32 = (uint32_t *)((uintptr_t)data->in + (uintptr_t)data->ipos);
 	const uint32_t num_orig32 = *m32;
 	unsigned int seqcnt;
-	unsigned int big_literals = 0;
 	int err;
-
-	/* If literal count > short form constraints, avoid data expansion */
-	if (data->literals > P_SHORT_MAX) big_literals = 1;
 
 	/* 32-bit sequences */
 	seqcnt = 0;
@@ -651,11 +643,11 @@ static inline int lzjody_find_seq32(struct comp_data_t * const restrict data)
 	}
 	seqcnt >>= 2;
 
-	if (seqcnt >= (MIN_SEQ32_LENGTH + big_literals)) {
+	if (seqcnt >= MIN_SEQ32_LENGTH) {
 		DLOG("Seq(32): start 0x%x, 0x%x items\n", num_orig32, seqcnt);
 		err = lzjody_flush_literals(data);
 		if (err < 0) return err;
-		err = lzjody_write_control(data, P_SEQ32, seqcnt);
+		err = lzjody_write_control(data, C_SEQ32, seqcnt);
 		if (err < 0) return err;
 		*(uint32_t *)((uintptr_t)data->out + (uintptr_t)data->opos) = num_orig32;
 		data->opos += sizeof(uint32_t);
@@ -673,11 +665,7 @@ static inline int lzjody_find_seq16(struct comp_data_t * const restrict data)
 	uint16_t *m16 = (uint16_t *)((uintptr_t)data->in + (uintptr_t)data->ipos);
 	const uint16_t num_orig16 = *m16;
 	unsigned int seqcnt;
-	unsigned int big_literals = 0;
 	int err;
-
-	/* If literal count > short form constraints, avoid data expansion */
-	if (data->literals > P_SHORT_MAX) big_literals = 1;
 
 	seqcnt = 0;
 	num16 = *m16;
@@ -689,11 +677,11 @@ static inline int lzjody_find_seq16(struct comp_data_t * const restrict data)
 		m16++;
 	}
 
-	if (seqcnt >= (MIN_SEQ16_LENGTH + big_literals)) {
+	if (seqcnt >= MIN_SEQ16_LENGTH) {
 		DLOG("Seq(16): start 0x%x, 0x%x items\n", num_orig16, seqcnt);
 		err = lzjody_flush_literals(data);
 		if (err < 0) return err;
-		err = lzjody_write_control(data, P_SEQ16, seqcnt);
+		err = lzjody_write_control(data, C_SEQ16, seqcnt);
 		if (err < 0) return err;
 		*(uint16_t *)((uintptr_t)data->out + (uintptr_t)data->opos) = num_orig16;
 		data->opos += sizeof(uint16_t);
@@ -711,11 +699,7 @@ static inline int lzjody_find_seq8(struct comp_data_t * const restrict data)
 	uint8_t *m8 = (uint8_t *)((uintptr_t)data->in + (uintptr_t)data->ipos);
 	const uint8_t num_orig8 = *m8;
 	unsigned int seqcnt;
-	unsigned int big_literals = 0;
 	int err;
-
-	/* If literal count > short form constraints, avoid data expansion */
-	if (data->literals > P_SHORT_MAX) big_literals = 1;
 
 	seqcnt = 0;
 	num8 = *m8;
@@ -726,11 +710,11 @@ static inline int lzjody_find_seq8(struct comp_data_t * const restrict data)
 		m8++;
 	}
 
-	if (seqcnt >= (MIN_SEQ8_LENGTH + big_literals)) {
+	if (seqcnt >= MIN_SEQ8_LENGTH) {
 		DLOG("Seq(8): start 0x%x, 0x%x items\n", num_orig8, seqcnt);
 		err = lzjody_flush_literals(data);
 		if (err < 0) return err;
-		err = lzjody_write_control(data, P_SEQ8, seqcnt);
+		err = lzjody_write_control(data, C_SEQ8, seqcnt);
 		if (err < 0) return err;
 		*(uint8_t *)((uintptr_t)data->out + (uintptr_t)data->opos) = num_orig8;
 		data->opos += sizeof(uint8_t);
@@ -773,7 +757,7 @@ extern int lzjody_compress(const unsigned char * const blk_in,
 
 	/* Perform sanity checks on data length */
 	if (length == 0) goto error_zero_length;
-	if (length > MAX_BSIZE) goto error_large_length;
+	if (length > LZJODY_MAX_BSIZE) goto error_large_length;
 
 	/* Nothing under 3 bytes long will compress */
 	if (length < 3) {
@@ -817,7 +801,7 @@ compress_short:
 
 error_large_length:
 	fprintf(stderr, "liblzjody: error: block length %d larger than maximum of %d\n",
-			length, MAX_BSIZE);
+			length, LZJODY_MAX_BSIZE);
 	return -1;
 error_zero_length:
 	fprintf(stderr, "liblzjody: error: cannot compress a zero-length block\n");
@@ -851,7 +835,7 @@ extern int lzjody_decompress(const unsigned char * const in,
 	unsigned int seqbits = 0;
 	unsigned char *bp_out;
 	unsigned int bp_length;
-	unsigned char bp_temp[MAX_BSIZE];
+	unsigned char bp_temp[LZJODY_MAX_BSIZE];
 	int err;
 
 	/* Cannot decompress a zero-length block */
@@ -879,7 +863,7 @@ extern int lzjody_decompress(const unsigned char * const in,
 				DLOG("Byte plane transform len 0x%x done\n", bp_length);
 				ipos += length;
 				opos += bp_length;
-				if (opos > MAX_BSIZE) goto error_bp_length;
+				if (opos > LZJODY_MAX_BSIZE) goto error_bp_length;
 				length = 0;
 				/* memcpy sucks, we can do it ourselves */
 				while(length < bp_length) {
@@ -889,14 +873,9 @@ extern int lzjody_decompress(const unsigned char * const in,
 				break;
 			case C_LZ:
 				/* LZ (dictionary-based) compression */
-				offset = control & 0xfff;
+				offset = control & 0xfff; //FIXME
 				length = *(in + ipos);
 				ipos++;
-				if (c & P_LZL) {
-					length <<= 8;
-					length += *(in + ipos);
-					ipos++;
-				}
 				DLOG("%04x:%04x: LZ block (%x:%x)\n",
 						ipos, opos, offset, length);
 				/* memcpy/memmove do not handle the overlap
@@ -907,7 +886,7 @@ extern int lzjody_decompress(const unsigned char * const in,
 				mem1 = out + offset;
 				mem2 = out + opos;
 				opos += length;
-				if (opos > MAX_BSIZE) goto error_lz_length;
+				if (opos > LZJODY_MAX_BSIZE) goto error_lz_length;
 			       	while (length != 0) {
 					*mem2 = *mem1;
 					mem1++; mem2++;
@@ -921,7 +900,7 @@ extern int lzjody_decompress(const unsigned char * const in,
 				c = *(in + ipos);
 				ipos++;
 				DLOG("%04x:%04x: RLE run 0x%x\n", ipos, opos, length);
-				if (opos + length > MAX_BSIZE) goto error_rle_length;
+				if (opos + length > LZJODY_MAX_BSIZE) goto error_rle_length;
 				while (length > 0) {
 					*(out + opos) = c;
 					opos++;
@@ -942,7 +921,7 @@ extern int lzjody_decompress(const unsigned char * const in,
 				}
 				ipos += control;
 				opos += control;
-				if (opos > MAX_BSIZE) goto error_lit_length;
+				if (opos > LZJODY_MAX_BSIZE) goto error_lit_length;
 				break;
 
 			case C_SEQ32:
@@ -955,7 +934,7 @@ extern int lzjody_decompress(const unsigned char * const in,
 				/* Get sequence start position */
 				m32 = (uint32_t *)((uintptr_t)out + (uintptr_t)opos);
 				opos += (length << 2);
-				if (opos > MAX_BSIZE) goto error_seq;
+				if (opos > LZJODY_MAX_BSIZE) goto error_seq;
 				DLOG("opos = 0x%x, length = 0x%x\n", opos, length);
 				while (length > 0) {
 					*m32 = num32;
@@ -975,7 +954,7 @@ extern int lzjody_decompress(const unsigned char * const in,
 				m16 = (uint16_t *)((uintptr_t)out + (uintptr_t)opos);
 				DLOG("opos = 0x%x, length = 0x%x\n", opos, length);
 				opos += (length << 1);
-				if (opos > MAX_BSIZE) goto error_seq;
+				if (opos > LZJODY_MAX_BSIZE) goto error_seq;
 				while (length > 0) {
 					*m16 = num16;
 					m16++; num16++;
@@ -993,7 +972,7 @@ extern int lzjody_decompress(const unsigned char * const in,
 				/* Get sequence start position */
 				m8 = (uint8_t *)((uintptr_t)out + (uintptr_t)opos);
 				opos += length;
-				if (opos > MAX_BSIZE) goto error_seq;
+				if (opos > LZJODY_MAX_BSIZE) goto error_seq;
 				while (length > 0) {
 					*m8 = num8;
 					m8++; num8++;
@@ -1010,7 +989,7 @@ extern int lzjody_decompress(const unsigned char * const in,
 	return opos;
 
 error_opos:
-	fprintf(stderr, "liblzjody: error: output pos %d higher than maximum %d)\n", opos, MAX_BSIZE);
+	fprintf(stderr, "liblzjody: error: output pos %d higher than maximum %d)\n", opos, LZJODY_MAX_BSIZE);
 	return -1;
 error_bp_length:
 	fprintf(stderr, "liblzjody: error: byte plane length overflows output pos (%d > %d)\n",
@@ -1036,7 +1015,7 @@ error_seq:
 	return -1;
 error_length:
 	fprintf(stderr, "liblzjody: data error: length 0x%x greater than maximum 0x%x @ 0x%x\n",
-			length, MAX_BSIZE, ipos - 1);
+			length, LZJODY_MAX_BSIZE, ipos - 1);
 	return -1;
 error_mode:
 	fprintf(stderr, "liblzjody: error: invalid decompressor mode 0x%x at 0x%x\n", mode, ipos);
