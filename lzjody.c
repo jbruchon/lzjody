@@ -89,9 +89,9 @@
  * WARNING: Changing these values too low will cause the compression
  * algorithms to expand data and fail in some cases!
  */
-#define MIN_LZ_MATCH 3
+#define MIN_LZ_MATCH 4
 #define MAX_LZ_MATCH 0x40000000
-#define MIN_RLE_LENGTH 3
+#define MIN_RLE_LENGTH 4
 /* Sequence lengths are not byte counts, they are word counts! */
 #define MIN_SEQ32_LENGTH 2
 #define MIN_SEQ16_LENGTH 3
@@ -289,9 +289,11 @@ static int lzjody_write_control(struct comp_data_t * const data,
 	p[0] |= type;
 	p[0] |= (bytes << 3);
 	/* Update output position */
-	data->opos += bytes + 1;
+	bytes++;
+	data->opos += bytes;
+	DLOG("wrote %u control bytes\n", bytes);
 
-	return 0;
+	return bytes;
 
 error_length:
 	fprintf(stderr, "error: length %u too long\n", length);
@@ -307,7 +309,7 @@ static int lzjody_really_flush_literals(struct comp_data_t * const restrict data
 
 	if (data->literals == 0) return 0;
 	DLOG("really_flush_literals: 0x%x (opos 0x%x)\n", data->literals, data->opos);
-	if ((data->opos + data->literals) > data->length) goto error_opos;
+	if ((data->opos + data->literals) >= data->length) goto nocompress;
 	/* First write the control byte... */
 	err = lzjody_write_control(data, C_LIT, data->literals);
 	if (err < 0) return err;
@@ -322,8 +324,8 @@ static int lzjody_really_flush_literals(struct comp_data_t * const restrict data
 	data->literals = 0;
 	return 0;
 
-error_opos:
-	fprintf(stderr, "error: final output position will overflow: 0x%x > 0x%x\n",
+nocompress:
+	DLOG("abort compression due to no improvement: 0x%x >= 0x%x\n",
 			data->opos + data->literals, data->length);
 	return -1;
 }
@@ -375,8 +377,8 @@ static int lzjody_flush_literals(struct comp_data_t * const restrict data)
 	d2.literals = 0;
 	d2.literal_start = 0;
 	d2.length = data->literals;
-	/* Don't allow recursive passes or compressed data size prefix */
-	d2.options = (data->options | O_REALFLUSH | O_NOPREFIX);
+	/* Don't allow recursive passes */
+	d2.options = (data->options | O_REALFLUSH);
 
 	DLOG("flush_literals: 0x%x\n", data->literals);
 
@@ -750,13 +752,11 @@ extern int lzjody_compress(const unsigned char * const blk_in,
 	data.in = blk_in;
 	data.out = blk_out;
 	data.ipos = 0;
-	data.opos = 2;
+	data.opos = 0;
 	data.literals = 0;
 	data.literal_start = 0;
 	data.length = length;
 	data.options = options;
-
-	if (options & O_NOPREFIX) data.opos = 0;
 
 	/* Perform sanity checks on data length */
 	if (length == 0) goto error_zero_length;
@@ -781,14 +781,10 @@ compress_short:
 	err = lzjody_flush_literals(&data);
 	if (err < 0) return err;
 
-	/* Write the total length to the data block unless asked not to */
-	if (!(options & O_NOPREFIX)) {
-		*(unsigned char *)(data.out) = (unsigned char)(((data.opos - 2) & 0x1f00) >> 8);
-		*(unsigned char *)(data.out + 1) = (unsigned char)(data.opos - 2);
-	}
-
+	/* Make sure there was an improvement and return appropriate value */
 	DLOG("compressed length: %x\n\n", data.opos);
-	return data.opos;
+	if (data.opos < length) return data.opos;
+	else return -1;
 
 error_large_length:
 	fprintf(stderr, "liblzjody: error: block length %d larger than maximum of %d\n",
@@ -813,7 +809,7 @@ extern int lzjody_decompress(const unsigned char * const in,
 	register unsigned int length = 0;
 	unsigned int control = 0;
 	unsigned char c;
-	unsigned char *mem1;
+	const unsigned char *mem1;
 	unsigned char *mem2;
 	/* FIXME: volatile to prevent vectorization (-fno-tree-loop-vectorize)
 	 * Should probably find another way to prevent unaligned vector access */
@@ -826,7 +822,7 @@ extern int lzjody_decompress(const unsigned char * const in,
 	unsigned int seqbits = 0;
 	unsigned char *bp_out;
 	unsigned int bp_length;
-	unsigned char bp_temp[LZJODY_MAX_BSIZE];
+	static unsigned char bp_temp[LZJODY_MAX_BSIZE];
 	int err;
 
 	/* Cannot decompress a zero-length block */
@@ -834,12 +830,14 @@ extern int lzjody_decompress(const unsigned char * const in,
 
 	while (ipos < size) {
 		c = *(in + ipos);
-		DLOG("Command 0x%x\n", c);
 		mode = c & M_OP;
 		/* Read length from control byte(s) and then skip them */
 		ctrl_type = STANDARD;
 		length = get_control_index(in + ipos, ctrl_type, &control);
+		length++;	/* Lengths start at 1 */
 		ipos += control;
+		DLOG("ipos 0x%x size 0x%x command 0x%x length 0x%x control 0x%x\n",
+				ipos, size, c, length, control);
 
 		/* Based on the command, select a decompressor */
 		switch (mode) {
@@ -865,7 +863,7 @@ extern int lzjody_decompress(const unsigned char * const in,
 				break;
 			case C_LZ:
 				/* LZ (dictionary-based) compression */
-				offset = 0xfff; //FIXME
+				offset = 0xfff; //FIXME: rewrite this part
 				length = *(in + ipos);
 				ipos++;
 				DLOG("%04x:%04x: LZ block (%x:%x)\n",
@@ -888,7 +886,6 @@ extern int lzjody_decompress(const unsigned char * const in,
 
 			case C_RLE:
 				/* Run-length encoding */
-				length = control;
 				c = *(in + ipos);
 				ipos++;
 				DLOG("%04x:%04x: RLE run 0x%x\n", ipos, opos, length);
@@ -902,17 +899,16 @@ extern int lzjody_decompress(const unsigned char * const in,
 
 			case C_LIT:
 				/* Literal byte sequence */
-				DLOG("%04x:%04x: 0x%x literal bytes\n", ipos, opos, control);
-				length = control;
-				mem1 = (unsigned char *)(in + ipos);
-				mem2 = (unsigned char *)(out + opos);
+				DLOG("%04x:%04x: 0x%x literal bytes\n", ipos, opos, length);
+				mem1 = in + ipos;
+				mem2 = out + opos;
+				ipos += length;
+				opos += length;
 			       	while (length != 0) {
 					*mem2 = *mem1;
 					mem1++; mem2++;
 					length--;
 				}
-				ipos += control;
-				opos += control;
 				if (opos > LZJODY_MAX_BSIZE) goto error_lit_length;
 				break;
 
@@ -977,7 +973,8 @@ extern int lzjody_decompress(const unsigned char * const in,
 		}
 	}
 
-	if (opos > size) goto error_opos;
+	DLOG("Final opos: 0x%x\n", opos);
+	if (opos > 4096) goto error_opos;
 	return opos;
 
 error_opos:

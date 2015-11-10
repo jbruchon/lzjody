@@ -55,6 +55,47 @@ static int thread_error;	/* nonzero if any thread fails */
 
 struct files_t files;
 
+
+/* Some functions from jody_endian.c
+ * Detect endianness at runtime and provide conversion functions
+ */
+
+/* Returns 1 for little-endian, 0 for big-endian */
+static inline int detect_endianness(void)
+{
+        union {
+                uint32_t big;
+                uint8_t p[4];
+        } i = {0x76543210};
+
+        if (i.p[0] == 0x76) return 0;
+        else return 1;
+
+}
+
+
+static uint32_t u32_endian_reverse(const uint32_t x)
+{
+        union {
+                uint32_t big;
+                uint8_t p[4];
+        } in;
+        union {
+                uint32_t big;
+                uint8_t p[4];
+        } out;
+
+        in.big = x;
+
+        out.p[0] = in.p[3];
+        out.p[1] = in.p[2];
+        out.p[2] = in.p[1];
+        out.p[3] = in.p[0];
+
+        return out.big;
+}
+
+
 #ifdef THREADED
 static void *compress_thread(void *arg)
 {
@@ -87,10 +128,13 @@ static void *compress_thread(void *arg)
 int main(int argc, char **argv)
 {
 	static unsigned char blk[LZJODY_MAX_BSIZE];
-	static unsigned char out[LZJODY_MAX_BSIZE + 4];
+	static unsigned char out[LZJODY_MAX_BSIZE + 8];
 	int i;
+	union {
+		uint32_t len;
+		uint8_t byte[4];
+	} c;
 	int length = 0;	/* Incoming data block length counter */
-	int c_length;   /* Compressed block length temp variable */
 	int blocknum = 0;	/* Current block number */
 	unsigned char options = 0;	/* Compressor options */
 #ifdef THREADED
@@ -116,11 +160,24 @@ int main(int argc, char **argv)
 		/* Non-threaded compression */
 		/* fprintf(stderr, "blk %p, blkend %p, files %p\n",
 				blk, blk + LZJODY_MAX_BSIZE - 1, files); */
-		while((length = fread(blk, 1, LZJODY_MAX_BSIZE, files.in))) {
+		while((length = fread(blk, 1, 4096, files.in))) {
 			if (ferror(files.in)) goto error_read;
 			DLOG("\n--- Compressing block %d\n", blocknum);
-			i = lzjody_compress(blk, out, options, length);
-			if (i < 0) goto error_compression;
+			i = lzjody_compress(blk, out + 4, options, length);
+			/* Incompressible block storage */
+			if (i < 0) {
+				i = length;
+				options = O_NOCOMPRESS;
+				memcpy(out + 4, blk, length);
+			}
+			if (detect_endianness()) c.len = u32_endian_reverse((uint32_t)i);
+			else c.len = (uint32_t)i;
+			out[0] = (c.byte[0] & 0x0f) | options;
+			DLOG("i = %d, out0 = 0x%x (0x%x & 0x0f | 0x%x)\n",i,out[0],c.byte[0],options);
+			out[1] = c.byte[1];
+			out[2] = c.byte[2];
+			out[3] = c.byte[3];
+			i += 4;
 			DLOG("c_size %d bytes\n", i);
 			i = fwrite(out, i, 1, files.out);
 			if (!i) goto error_write;
@@ -249,37 +306,37 @@ int main(int argc, char **argv)
 
 	/* Decompress */
 	if (!strncmp(argv[1], "-d", 2)) {
-		while(fread(blk, 1, 2, files.in)) {
+		while(fread(blk, 1, 4, files.in)) {
 			/* Get block-level decompression options */
-			options = *blk & 0xc0;
+			options = blk[0] & 0xf0;
 
 			/* Read the length of the compressed data */
-			length = *(blk + 1);
-			length |= ((*blk & 0x1f) << 8);
-			if (length > (LZJODY_MAX_BSIZE + 4)) goto error_blocksize_d_prefix;
+			c.byte[0] = blk[0] & 0x0f;
+			c.byte[1] = blk[1];
+			c.byte[2] = blk[2];
+			c.byte[3] = blk[3];
+			if (detect_endianness()) length = u32_endian_reverse((uint32_t)c.len);
+			else length = (uint32_t)c.len;
+			DLOG("o %x, length = 0x%x [%x %x %x %x]\n", options,length,blk[0],blk[1],blk[2],blk[3]);
+			if (length > (4096 + 4)) goto error_blocksize_d_prefix;
 
 			i = fread(blk, 1, length, files.in);
 			if (ferror(files.in)) goto error_read;
 			if (i != length) goto error_shortread;
 
 			if (options & O_NOCOMPRESS) {
-				c_length = *(blk + 1);
-				c_length |= ((*blk & 0x1f) << 8);
-				DLOG("--- Writing uncompressed block %d (%d bytes)\n", blocknum, c_length);
-				if (c_length > LZJODY_MAX_BSIZE) goto error_unc_length;
-				i = fwrite((blk + 2), 1, c_length, files.out);
-				if (i != c_length) {
-					length = c_length;
-					goto error_write;
-				}
+				DLOG("--- Writing uncompressed block %d (%d bytes)\n", blocknum, length);
+				if (length > LZJODY_MAX_BSIZE) goto error_unc_length;
+				i = fwrite(blk, 1, length, files.out);
+				if (i != length) goto error_write;
 			} else {
 				DLOG("--- Decompressing block %d\n", blocknum);
-				length = lzjody_decompress(blk, out, i, options);
+				length = lzjody_decompress(blk, out + 4, i, options);
 				if (length < 0) goto error_decompress;
-				if (length > LZJODY_MAX_BSIZE) goto error_blocksize_decomp;
-				i = fwrite(out, 1, length, files.out);
+				if (length > 4096) goto error_blocksize_decomp;
+				i = fwrite(out + 4, 1, length, files.out);
 				if (i != length) goto error_write;
- /*			     DLOG("Wrote %d bytes\n", i); */
+				DLOG("Wrote %d bytes\n", i);
 			}
 
 
@@ -305,7 +362,7 @@ error_shortread:
 	exit(EXIT_FAILURE);
 error_unc_length:
 	fprintf(stderr, "Error: uncompressed length too large (%d > %d)\n",
-			c_length, LZJODY_MAX_BSIZE);
+			length, LZJODY_MAX_BSIZE);
 	exit(EXIT_FAILURE);
 error_blocksize_d_prefix:
 	fprintf(stderr, "Error: decompressor prefix too large (%d > %d)\n",

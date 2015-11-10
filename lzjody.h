@@ -33,7 +33,6 @@ extern "C" {
 
 /* Options for the compressor */
 #define O_FAST_LZ 0x01	/* Stop at first LZ match (faster but not recommended) */
-#define O_NOPREFIX 0x40	/* Don't prefix lzjody_compress() data with the compressed length */
 #define O_REALFLUSH 0x80	/* Make lzjody_flush_literals() flush without question */
 
 /* Decompressor options (some copied from data block header) */
