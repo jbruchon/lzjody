@@ -79,6 +79,15 @@
 #define M_OFFSET	0x0C	/* Offset top 2 bits */
 #define M_LENGTH	0x03	/* Length top 2 bits */
 
+/* Right shifts for masks */
+
+#define SHIFT_CSIZE 3
+#define SHIFT_TOP 0
+#define SHIFT_OSIZE 6
+#define SHIFT_LSIZE 4
+#define SHIFT_OFFSET 2
+#define SHIFT_LENGTH 0
+
 /* Minimum sizes for compression
  * These sizes are roughly calculated as follows:
  * control byte(s) + data byte(s) + other control byte(s)
@@ -145,24 +154,25 @@ static inline uint32_t get_control_index(const unsigned char * restrict block,
 
 	switch (type) {
 		case STANDARD:
-			bytes = *block & M_SIZE;
-			value = *block & M_TOP;
+			bytes = (*block & M_SIZE) >> SHIFT_CSIZE;
+			value = (*block & M_TOP) >> SHIFT_TOP;
 			block++;
 			break;
 		case LZ_OFFSET:
-			bytes = *block & M_LSIZE;
-			value = *block & M_LENGTH;
+			bytes = (*block & M_LSIZE) >> SHIFT_LSIZE;
+			value = (*block & M_LENGTH) >> SHIFT_LENGTH;
 			block++;
 			break;
 		case LZ_LENGTH:
 			/* Skip extra length bytes */
-			skip = (*block & M_LSIZE) + 1;
-			bytes = *block & M_OSIZE;
-			value = *block & M_OFFSET;
+			skip = ((*block & M_LSIZE) >> SHIFT_LSIZE) + 1;
+			bytes = (*block & M_OSIZE) >> SHIFT_OSIZE;
+			value = (*block & M_OFFSET) >> SHIFT_OFFSET;
 			block += skip;
 			break;
 	}
 
+	DLOG("get_control_index: bytes %d\n", bytes);
 	/* Tell caller how many control bytes there are */
 	*skipbytes = bytes + 1;
 	/* Add in any extension bytes */
@@ -189,17 +199,17 @@ static int compress_scan(struct comp_data_t * const restrict data,
 		 * just add the byte to the literal stream */
 		DLOG("[c_scan] ipos: 0x%x, opos: 0x%x\n", data->ipos, data->opos);
 
-		err = lzjody_find_rle(data);
-		if (err > 0) continue;
-		if (err < 0) return err;
-
-		err = lzjody_find_seq8(data);
+		err = lzjody_find_seq32(data);
 		if (err > 0) continue;
 		if (err < 0) return err;
 		err = lzjody_find_seq16(data);
 		if (err > 0) continue;
 		if (err < 0) return err;
-		err = lzjody_find_seq32(data);
+		err = lzjody_find_seq8(data);
+		if (err > 0) continue;
+		if (err < 0) return err;
+
+		err = lzjody_find_rle(data);
 		if (err > 0) continue;
 		if (err < 0) return err;
 

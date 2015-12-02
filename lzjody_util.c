@@ -165,6 +165,7 @@ int main(int argc, char **argv)
 			DLOG("\n--- Compressing block %d\n", blocknum);
 			i = lzjody_compress(blk, out + 4, options, length);
 			/* Incompressible block storage */
+			options = 0;
 			if (i < 0) {
 				i = length;
 				options = O_NOCOMPRESS;
