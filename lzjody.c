@@ -490,7 +490,7 @@ static inline int lzjody_find_lz(struct comp_data_t * const restrict data,
 
 		m2 = data->in + offset;
 /*		DLOG("LZ: offset 0x%x, remain 0x%x, scan 0x%x, total_scans 0x%x\n",
-		    offset, remain, scan, total_scans); */
+			offset, remain, scan, total_scans); */
 
 		/* Try to reject the match quickly */
 		if (*(m1 + min_lz_match - 1) != *(m2 + min_lz_match - 1)) goto end_lz_matches;
@@ -823,12 +823,16 @@ extern int lzjody_decompress(const unsigned char * const in,
 	unsigned char *mem2;
 	/* FIXME: volatile to prevent vectorization (-fno-tree-loop-vectorize)
 	 * Should probably find another way to prevent unaligned vector access */
-	uint32_t *m32;
-	volatile uint16_t *m16;
-	uint8_t *m8;
-	uint32_t num32;
-	uint16_t num16;
-	uint8_t num8;
+	union {
+		uint32_t *m32;
+		volatile uint16_t *m16;
+		uint8_t *m8;
+	} mem;
+	union {
+		uint32_t num32;
+		uint16_t num16;
+		uint8_t num8;
+	} num;
 	unsigned int seqbits = 0;
 	unsigned char *bp_out;
 	unsigned int bp_length;
@@ -887,7 +891,7 @@ extern int lzjody_decompress(const unsigned char * const in,
 				mem2 = out + opos;
 				opos += length;
 				if (opos > LZJODY_MAX_BSIZE) goto error_lz_length;
-			       	while (length != 0) {
+				while (length != 0) {
 					*mem2 = *mem1;
 					mem1++; mem2++;
 					length--;
@@ -914,7 +918,7 @@ extern int lzjody_decompress(const unsigned char * const in,
 				mem2 = out + opos;
 				ipos += length;
 				opos += length;
-			       	while (length != 0) {
+				while (length != 0) {
 					*mem2 = *mem1;
 					mem1++; mem2++;
 					length--;
@@ -927,16 +931,16 @@ extern int lzjody_decompress(const unsigned char * const in,
 				/* Sequential increment compression (32-bit) */
 				DLOG("%04x:%04x: Seq(32) 0x%x\n", ipos, opos, length);
 				/* Get sequence start number */
-				num32 = *(uint32_t *)((uintptr_t)in + (uintptr_t)ipos);
+				num.num32 = *(uint32_t *)((uintptr_t)in + (uintptr_t)ipos);
 				ipos += sizeof(uint32_t);
 				/* Get sequence start position */
-				m32 = (uint32_t *)((uintptr_t)out + (uintptr_t)opos);
+				mem.m32 = (uint32_t *)((uintptr_t)out + (uintptr_t)opos);
 				opos += (length << 2);
 				if (opos > LZJODY_MAX_BSIZE) goto error_seq;
 				DLOG("opos = 0x%x, length = 0x%x\n", opos, length);
 				while (length > 0) {
-					*m32 = num32;
-					m32++; num32++;
+					*mem.m32 = num.num32;
+					mem.m32++; num.num32++;
 					length--;
 				}
 				break;
@@ -946,16 +950,16 @@ extern int lzjody_decompress(const unsigned char * const in,
 				/* Sequential increment compression (16-bit) */
 				DLOG("%04x:%04x: Seq(16) 0x%x\n", ipos, opos, length);
 				/* Get sequence start number */
-				num16 = *(uint16_t *)((uintptr_t)in + (uintptr_t)ipos);
+				num.num16 = *(uint16_t *)((uintptr_t)in + (uintptr_t)ipos);
 				ipos += sizeof(uint16_t);
 				/* Get sequence start position */
-				m16 = (uint16_t *)((uintptr_t)out + (uintptr_t)opos);
+				mem.m16 = (uint16_t *)((uintptr_t)out + (uintptr_t)opos);
 				DLOG("opos = 0x%x, length = 0x%x\n", opos, length);
 				opos += (length << 1);
 				if (opos > LZJODY_MAX_BSIZE) goto error_seq;
 				while (length > 0) {
-					*m16 = num16;
-					m16++; num16++;
+					*mem.m16 = num.num16;
+					mem.m16++; num.num16++;
 					length--;
 				}
 				break;
@@ -965,15 +969,15 @@ extern int lzjody_decompress(const unsigned char * const in,
 				/* Sequential increment compression (8-bit) */
 				DLOG("%04x:%04x: Seq(8) 0x%x\n", ipos, opos, length);
 				/* Get sequence start number */
-				num8 = *(uint8_t *)((uintptr_t)in + (uintptr_t)ipos);
+				num.num8 = *(uint8_t *)((uintptr_t)in + (uintptr_t)ipos);
 				ipos += sizeof(uint8_t);
 				/* Get sequence start position */
-				m8 = (uint8_t *)((uintptr_t)out + (uintptr_t)opos);
+				mem.m8 = (uint8_t *)((uintptr_t)out + (uintptr_t)opos);
 				opos += length;
 				if (opos > LZJODY_MAX_BSIZE) goto error_seq;
 				while (length > 0) {
-					*m8 = num8;
-					m8++; num8++;
+					*mem.m8 = num.num8;
+					mem.m8++; num.num8++;
 					length--;
 				}
 				break;
