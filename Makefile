@@ -5,7 +5,9 @@ AR=ar
 #CFLAGS=-O3 -g
 CFLAGS=-Og -g3
 BUILD_CFLAGS = -std=gnu99 -I. -D_FILE_OFFSET_BITS=64 -fstrict-aliasing -pipe
-BUILD_CFLAGS += -Wall -Wextra -Wcast-align -Wstrict-aliasing -pedantic -Wstrict-overflow -Wno-unused-parameter
+BUILD_CFLAGS += -Wall -Wextra -Wwrite-strings -Wcast-align -Wstrict-aliasing -pedantic -Wstrict-overflow -Wstrict-prototypes -Wpointer-arith -Wundef
+BUILD_CFLAGS += -Wshadow -Wfloat-equal -Wstrict-overflow=5 -Waggregate-return -Wcast-qual -Wswitch-default -Wswitch-enum -Wunreachable-code -Wformat=2 -Winit-self
+#BUILD_CFLAGS += -Wconversion
 LDFLAGS=-L.
 LDLIBS=
 

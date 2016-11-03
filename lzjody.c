@@ -747,7 +747,7 @@ extern int lzjody_decompress(const unsigned char * const in,
 	unsigned int sl;	/* short/long */
 	unsigned int control = 0;
 	unsigned char c;
-	unsigned char *mem1;
+	const unsigned char *mem1;
 	unsigned char *mem2;
 	/* FIXME: volatile to prevent vectorization (-fno-tree-loop-vectorize)
 	 * Should probably find another way to prevent unaligned vector access */
@@ -882,7 +882,7 @@ extern int lzjody_decompress(const unsigned char * const in,
 				/* Literal byte sequence */
 				DLOG("%04x:%04x: 0x%x literal bytes\n", ipos, opos, control);
 				length = control;
-				mem1 = (unsigned char *)(in + ipos);
+				mem1 = (const unsigned char *)(in + ipos);
 				mem2 = (unsigned char *)(out + opos);
 				while (length != 0) {
 					*mem2 = *mem1;
