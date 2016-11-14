@@ -914,8 +914,8 @@ extern int lzjody_decompress(const unsigned char * const in,
 			case C_LIT:
 				/* Literal byte sequence */
 				DLOG("%04x:%04x: 0x%x literal bytes\n", ipos, opos, length);
-				mem1 = in + ipos;
-				mem2 = out + opos;
+				mem1 = (const unsigned char *)(in + ipos);
+				mem2 = (unsigned char *)(out + opos);
 				ipos += length;
 				opos += length;
 				while (length != 0) {
