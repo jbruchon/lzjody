@@ -1,5 +1,8 @@
 #!/bin/sh
 
+# Jody's generic chroot build script
+# Version 1.0
+
 ARCHES="i386 x86-64 uclibc-i386 uclibc-x86-64"
 test -z "$NAME" && NAME="$(basename "$(pwd)")"
 test -e "version.h" && VER="$(grep '#define VER ' version.h | tr -d \\\" | cut -d' ' -f3)"
@@ -51,12 +54,12 @@ if [ "$DO_CHROOT_BUILD" = "1" ]
 	else
 	echo baz
 	export DO_CHROOT_BUILD=1
-	for X in $ARCHES
+	for ARCH in $ARCHES
 		do
+		export ARCH
+		export CHROOT="$CHROOT_BASE/$ARCH"
+		test ! -d $CHROOT && echo "$CHROOT not present, not building $ARCH package." && continue
 		echo "Performing package build for $CHROOT"
-		export CHROOT="$CHROOT_BASE/$X"
-		export ARCH="$X"
-		test ! -d $CHROOT && echo "$CHROOT not present, not building $CHROOT_ARCH package." && exit 1
 		test ! -x $CHROOT/bin/sh && echo "$CHROOT does not seem to be a chroot; aborting." && exit 1
 		mount --bind /dev $CHROOT/dev || clean_exit
 		mount --bind /usr/src $CHROOT/usr/src || clean_exit
@@ -64,7 +67,7 @@ if [ "$DO_CHROOT_BUILD" = "1" ]
 		mount -t proc proc $CHROOT/proc || clean_exit
 		mount -t sysfs sysfs $CHROOT/sys || clean_exit
 		mount -t tmpfs tmpfs $CHROOT/tmp || clean_exit
-		if echo "$CHROOT_ARCH" | grep -q "i386"
+		if echo "$ARCH" | grep -q "i386"
 			then linux32 chroot $CHROOT $WD/$0 $WD
 			else chroot $CHROOT $WD/$0 $WD
 		fi
