@@ -18,6 +18,7 @@ test ! -x $LZJODY && echo "Compile the program first." && clean_exit 1
 # For running e.g. Valgrind
 test -z "$1" || LZJODY="$@ $LZJODY"
 
+echo "Running basic block tests."
 CFAIL=0; DFAIL=0
 $LZJODY -c < $IN > $COMP 2>log.test.compress || CFAIL=1
 if [ $CFAIL -eq 0 ]
