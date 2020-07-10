@@ -1,7 +1,7 @@
 /*
  * Lempel-Ziv-JodyBruchon compression library
  *
- * Copyright (C) 2014, 2015 by Jody Bruchon <jody@jodybruchon.com>
+ * Copyright (C) 2014-2020 by Jody Bruchon <jody@jodybruchon.com>
  * Released under The MIT License
  */
 
