@@ -1,7 +1,7 @@
 /*
  * Byte plane transformation
  *
- * Copyright (C) 2014, 2015 by Jody Bruchon <jody@jodybruchon.com>
+ * Copyright (C) 2014-2020 by Jody Bruchon <jody@jodybruchon.com>
  *
  * See byteplane_xfrm.c for more information.
  */

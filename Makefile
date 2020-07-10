@@ -1,3 +1,7 @@
+#
+# lzjody Makefile
+#
+
 CC=gcc
 AR=ar
 #CFLAGS=-O3 -ftree-vectorize -fgcse-las
