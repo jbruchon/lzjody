@@ -10,6 +10,6 @@
 #define BYTEPLANE_XFRM_H
 
 extern int byteplane_transform(const unsigned char * const,
-		unsigned char * const, int, char);
+		unsigned char * const, int, int);
 
 #endif	/*  BYTEPLANE_XFRM_H */

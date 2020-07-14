@@ -14,7 +14,7 @@
 
 extern int byteplane_transform(const unsigned char * const in,
 		unsigned char * const out, int length,
-		char num_planes)
+		int num_planes)
 {
 	int i;
 	int plane = 0;
