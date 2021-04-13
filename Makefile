@@ -35,15 +35,19 @@ ifdef DEBUG
 BUILD_CFLAGS += -DDEBUG -g
 endif
 
-TARGETS = lzjody lzjody.static test
+TARGETS = lzjody lzjody.static bpxfrm test
 
 # On MinGW (Windows) only build static versions
 ifeq ($(OS), Windows_NT)
         COMPILER_OPTIONS += -D__USE_MINGW_ANSI_STDIO=1
-	TARGETS = lzjody.static test
+	TARGETS = lzjody.static bpxfrm test
+	EXT = .exe
 endif
 
 all: $(TARGETS)
+
+bpxfrm: bpxfrm.o byteplane_xfrm.o
+	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(BUILD_CFLAGS) -o bpxfrm byteplane_xfrm.o bpxfrm.o
 
 lzjody.static: liblzjody.a lzjody_util.o
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LDLIBS) $(BUILD_CFLAGS) -o lzjody.static lzjody_util.o liblzjody.a
@@ -68,10 +72,10 @@ liblzjody.a: lzjody.c byteplane_xfrm.c
 	$(CC) -c $(BUILD_CFLAGS) $(CFLAGS) $<
 
 clean:
-	rm -f *.o *.a *~ .*un~ lzjody lzjody*.static *.so* debug.log *.?.gz log.test.* out.*
+	rm -f *.o *.a *~ .*un~ lzjody lzjody*.static$(EXT) bpxfrm$(EXT) *.so* debug.log *.?.gz log.test.* out.*
 
 distclean:
-	rm -f *.o *.a *~ .*un~ lzjody lzjody*.static *.so* debug.log *.?.gz log.test.* out.* *.pkg.tar.*
+	rm -f *.o *.a *~ .*un~ lzjody lzjody*.static$(EXT) bpxfrm$(EXT) *.so* debug.log *.?.gz log.test.* out.* *.pkg.tar.*
 
 install: all
 	install -D -o root -g root -m 0755 lzjody $(bindir)/lzjody
@@ -79,6 +83,7 @@ install: all
 	install -D -o root -g root -m 0644 liblzjody.a $(libdir)/liblzjody.a
 	install -D -o root -g root -m 0644 lzjody.h $(includedir)/lzjody.h
 #	install -D -o root -g root -m 0644 lzjody.8.gz $(mandir)/man8/lzjody.8.gz
+	install -D -o root -g root -m 0755 bpxfrm $(bindir)/bpxfrm
 
 test: lzjody.static
 	./test.sh
