@@ -214,6 +214,7 @@ int main(int argc, char **argv)
 			fprintf(stderr, "warning: system returned bad number of processors: %d\n", nprocs);
 			nprocs = 1;
 		}
+		fprintf(stderr, "lzjody: compressing with %d worker threads\n", nprocs);
  #endif /* _SC_NPROCESSORS_ONLN */
  #ifdef FORCE_THREADS
 		nprocs = FORCE_THREADS;
