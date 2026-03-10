@@ -29,10 +29,10 @@ Compression methods used by this program include:
   performed on otherwise incompressible data to see if it can be arranged
   differently to produce a compressible pattern.
 
-The included compression utility can use POSIX threads; to use threaded mode,
-build like this:
+The included compression utility uses POSIX threads; to compile the binary
+in single-threaded mode only, build like this:
 
-make THREADED=1
+make NO_THREADED=1
 
 You can also use DEBUG=1 to turn on some very annoying debugging messages.
 
