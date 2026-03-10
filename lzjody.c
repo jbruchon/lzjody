@@ -95,7 +95,7 @@ struct lz_index_t {
 
 static int lzjody_find_lz(struct comp_data_t * const restrict data,
 		const struct lz_index_t * const restrict idx);
-//static int lzjody_find_rle(struct comp_data_t * const restrict data);
+static int lzjody_find_rle(struct comp_data_t * const restrict data);
 static int lzjody_find_seq32(struct comp_data_t * const restrict data);
 static int lzjody_find_seq16(struct comp_data_t * const restrict data);
 static int lzjody_find_seq8(struct comp_data_t * const restrict data);
@@ -111,22 +111,20 @@ static int compress_scan(struct comp_data_t * const restrict data,
 		 * just add the byte to the literal stream */
 		DLOG("[c_scan] ipos: 0x%x, opos: 0x%x\n", data->ipos, data->opos);
 
-#if 0  /* Rolled into seq8 */
-		if ((data->options & O_NO_RLE) == 0) {
+		if (!(data->options & O_NO_RLE)) {
 			err = lzjody_find_rle(data);
 			if (err < 0) return err;
 			if (err > 0) continue;
 		}
-#endif
 
 		if (!(data->options & O_NO_SEQ)) {
-			err = lzjody_find_seq32(data);
+			err = lzjody_find_seq8(data);
 			if (err < 0) return err;
 			if (err > 0) continue;
 			err = lzjody_find_seq16(data);
 			if (err < 0) return err;
 			if (err > 0) continue;
-			err = lzjody_find_seq8(data);
+			err = lzjody_find_seq32(data);
 			if (err < 0) return err;
 			if (err > 0) continue;
 		}
@@ -513,7 +511,6 @@ err_remain_underflow:
 	return -1;
 }
 
-#if 0   /* RLE code was rolled into sequential code as a special case */
 /* Find best RLE data match for current input position */
 static int lzjody_find_rle(struct comp_data_t * const restrict data)
 {
@@ -543,7 +540,6 @@ static int lzjody_find_rle(struct comp_data_t * const restrict data)
 	}
 	return 0;
 }
-#endif
 
 /* Find sequential 32-bit values for compression */
 static int lzjody_find_seq32(struct comp_data_t * const restrict data)
@@ -647,19 +643,6 @@ static int lzjody_find_seq8(struct comp_data_t * const restrict data)
 		m8++;
 	}
 
-	/* RLE is a special case where the difference is 0 */
-	if (diff == 0 && seqcnt >= (MIN_RLE_LENGTH + big_literals)) {
-		DLOG("Seq(8): start 0x%x, 0x%x items (RLE)\n", num_orig8, seqcnt);
-		err = lzjody_flush_literals(data);
-		if (err < 0) return err;
-		err = lzjody_write_control(data, P_RLE, seqcnt);
-		/* Write repeated byte */
-		*(data->out + data->opos) = num8;
-		data->opos++;
-		/* Skip matched input */
-		data->ipos += seqcnt;
-		return 1;
-	}
 	if (seqcnt >= (MIN_SEQ8_LENGTH + big_literals)) {
 		DLOG("Seq(8): start 0x%x, 0x%x items\n", num_orig8, seqcnt);
 		err = lzjody_flush_literals(data);
