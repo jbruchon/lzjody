@@ -25,8 +25,8 @@ datarootdir=${prefix}/share
 datadir=${datarootdir}
 sysconfdir=${prefix}/etc
 
-# Use POSIX threads if the user specifically requests it
-ifdef THREADED
+# Use POSIX threads by default
+ifndef NO_THREADED
 LDFLAGS += -lpthread
 COMPILER_OPTIONS += -DTHREADED
 endif
